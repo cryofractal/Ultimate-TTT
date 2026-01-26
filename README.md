@@ -1,2 +1,2 @@
-# Ultimate-Tic-Tac-Toe
-Nested layered TTT program
+# Ultimate-TTT
+Nested layered Tic Tac Toe program
