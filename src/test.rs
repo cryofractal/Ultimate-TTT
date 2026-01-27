@@ -1,6 +1,6 @@
 use crate::{cell::*, coord};
 
-fn generate_rank_n(n: u8) -> Cell {
+pub fn generate_rank_n(n: u8) -> Cell {
     let mut cell = Cell::new(n);
     if n == 0 {
         return cell;

@@ -88,7 +88,7 @@ impl Cell {
         }
     }
     pub fn check(&self, team_id: u8) -> CellState {
-        if !self.children.values().any(|x| x.state.is_nonempty()) {
+        if self.children.values().any(|x| x.state.is_nonempty()) {
             if self.captured(team_id) {
                 CellState::Owned(team_id)
             } else {
@@ -129,6 +129,8 @@ impl Cell {
             [coord![2, 2], coord![2, 1], coord![2, 0]],
             [coord![2, 2], coord![1, 2], coord![0, 2]],
             [coord![0, 2], coord![1, 1], coord![0, 2]],
+            [coord![1, 0], coord![1, 1], coord![1, 2]],
+            [coord![0, 1], coord![1, 1], coord![2, 1]],
         ]
     }
 }
