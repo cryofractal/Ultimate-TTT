@@ -9,9 +9,10 @@ use crate::team::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Coord {
-    coord: Vec<Index>,
+    pub coord: Vec<Index>,
 }
 
+#[macro_export]
 macro_rules! coord {
     ($($x:expr),*) => {
         {
@@ -22,15 +23,14 @@ macro_rules! coord {
     };
 }
 
-const CELL_NUM: usize = 9;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
     // Which layer the cell is in. 0 is the outermost layer.
-    rank: u8,
+    pub rank: u8,
     // Cells contained within the larger cell
-    children: HashMap<Coord, Cell>,
+    pub children: HashMap<Coord, Cell>,
     // Current status of play of the cell
-    state: CellState,
+    pub state: CellState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -58,6 +58,13 @@ impl CellState {
 }
 
 impl Cell {
+    pub fn new(rank: u8) -> Self {
+        Cell {
+            rank: rank,
+            children: HashMap::new(),
+            state: CellState::Empty,
+        }
+    }
     pub fn update(&mut self, path: &[Coord], team_id: u8) -> bool {
         if path.len() > 0 {
             if !self

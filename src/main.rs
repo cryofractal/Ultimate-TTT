@@ -1,6 +1,7 @@
 pub mod app;
 pub mod cell;
 pub mod team;
+pub mod test;
 
 use crate::app::*;
 
