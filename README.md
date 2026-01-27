@@ -1,2 +1,2 @@
 # Ultimate-TTT
-Nested layered Tic Tac Toe program
+Nested layered n-dimensional Tic Tac Toe program

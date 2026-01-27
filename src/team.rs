@@ -1,7 +1,7 @@
 use egui::*;
 #[derive(Clone, Debug)]
 pub struct Team {
-    name: String,
+    pub name: String,
     pub id: u8,
-    color: egui::Color32,
+    pub color: egui::Color32,
 }

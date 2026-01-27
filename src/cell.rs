@@ -13,9 +13,10 @@ use crate::team::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Coord {
-    coord: Vec<Index>,
+    pub coord: Vec<Index>,
 }
 
+#[macro_export]
 macro_rules! coord {
     ($($x:expr),*) => {
         {
@@ -41,11 +42,11 @@ const CELL_NUM: usize = 9;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
     // Which layer the cell is in. 0 is the outermost layer.
-    rank: u8,
+    pub rank: u8,
     // Cells contained within the larger cell
-    children: HashMap<Coord, Cell>,
+    pub children: HashMap<Coord, Cell>,
     // Current status of play of the cell
-    state: CellState,
+    pub state: CellState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -73,6 +74,13 @@ impl CellState {
 }
 
 impl Cell {
+    pub fn new(rank: u8) -> Self {
+        Cell {
+            rank: rank,
+            children: HashMap::new(),
+            state: CellState::Empty,
+        }
+    }
     pub fn update(&mut self, path: &[Coord], team_id: u8) -> bool {
         if path.len() > 0 {
             if !self
@@ -96,7 +104,7 @@ impl Cell {
         }
     }
     pub fn check(&self, team_id: u8) -> CellState {
-        if !self.children.values().any(|x| x.state.is_nonempty()) {
+        if self.children.values().any(|x| x.state.is_nonempty()) {
             if self.captured(team_id) {
                 CellState::Owned(team_id)
             } else {
@@ -123,7 +131,7 @@ impl Cell {
         let use_subset_alg = true;
         if use_subset_alg {
             //Use subsets alg
-            subsets_of_size(set, 3)
+            dbg!(subsets_of_size(set, 3))
                 .iter()
                 .any(|x| Self::captured_subset(x.clone()))
         } else {
@@ -151,19 +159,19 @@ impl Cell {
             [coord![2, 2], coord![2, 1], coord![2, 0]],
             [coord![2, 2], coord![1, 2], coord![0, 2]],
             [coord![0, 2], coord![1, 1], coord![0, 2]],
+            [coord![1, 0], coord![1, 1], coord![1, 2]],
+            [coord![0, 1], coord![1, 1], coord![2, 1]],
         ]
     }
 }
 // O(l^d choose l) l=layers, d=dimensions
 fn subsets_of_size(set: Vec<&Coord>, size: usize) -> Vec<Vec<&Coord>> {
-    if set.len() > size {
-        panic!(
-            "There are no subsets of size {} in set of size {}",
-            size,
-            set.len()
-        )
+    if set.len() < size {
+        Vec::new()
     } else if set.len() == size {
         vec![set]
+    } else if size == 0 {
+        vec![Vec::new()]
     } else {
         let mut first_included = subsets_of_size(Vec::from(&set[1..]), size);
         let first_excluded: Vec<Vec<&Coord>> = subsets_of_size(Vec::from(&set[1..]), size - 1)
