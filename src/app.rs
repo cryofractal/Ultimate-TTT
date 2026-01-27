@@ -24,6 +24,7 @@ impl App {
         let moves = vec![
             vec![coord![0, 1], coord![1, 0]],
             vec![coord![0, 1], coord![1, 2]],
+            vec![coord![0, 1], coord![0, 1]],
             vec![coord![0, 1], coord![1, 1]],
             vec![coord![0, 0], coord![2, 2]],
         ];
