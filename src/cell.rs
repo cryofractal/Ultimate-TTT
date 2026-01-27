@@ -1,4 +1,8 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::HashMap,
+    ops::{Div, Sub},
+    rc::Rc,
+};
 
 type Index = u8;
 
@@ -20,6 +24,17 @@ macro_rules! coord {
             Coord {coord: vect}
         }
     };
+}
+
+fn sub_coords(lhs: &Coord, rhs: &Coord) -> Vec<i16> {
+    if lhs.coord.len() != rhs.coord.len() {
+        panic!("Trying to subtract coords of different sizes")
+    }
+    let mut diff: Vec<i16> = Vec::new();
+    for i in 0..lhs.coord.len() {
+        diff.push((lhs.coord[i]) as i16 - rhs.coord[i] as i16);
+    }
+    diff
 }
 
 const CELL_NUM: usize = 9;
@@ -95,25 +110,39 @@ impl Cell {
         if self.children.len() != 9 {
             todo!()
         } else {
-            let mut set = HashMap::new();
-            self.children
-                .iter()
-                .filter(|x| x.1.state == CellState::Owned(team_id))
-                .map(|x| x.0)
-                .for_each(|x| {
-                    set.insert(x, ());
-                });
-            Self::captured_set(set)
+            Self::captured_set(
+                self.children
+                    .iter()
+                    .filter(|x| x.1.state == CellState::Owned(team_id))
+                    .map(|x| x.0)
+                    .collect(),
+            )
         }
     }
-    pub fn captured_set(set: HashMap<&Coord, ()>) -> bool {
-        for row in Self::three_in_a_rows() {
-            if row.iter().all(|x| set.contains_key(x)) {
-                return true;
+    pub fn captured_set(set: Vec<&Coord>) -> bool {
+        let use_subset_alg = true;
+        if use_subset_alg {
+            //Use subsets alg
+            subsets_of_size(set, 3)
+                .iter()
+                .any(|x| Self::captured_subset(x.clone()))
+        } else {
+            //Use lines alg
+            todo!()
+        }
+    }
+    pub fn captured_subset(mut set: Vec<&Coord>) -> bool {
+        set.sort_by_key(|x| x.coord.clone());
+        let base_diff = sub_coords(set[0], set[1]);
+        for i in 2..set.len() {
+            if sub_coords(set[i - 1], set[i]) != base_diff {
+                return false;
             }
         }
-        false
+        true
     }
+
+    // O(l2^d) l=layers, d=dimensions
     fn three_in_a_rows() -> Vec<[Coord; 3]> {
         vec![
             [coord![0, 0], coord![0, 1], coord![0, 2]],
@@ -123,5 +152,29 @@ impl Cell {
             [coord![2, 2], coord![1, 2], coord![0, 2]],
             [coord![0, 2], coord![1, 1], coord![0, 2]],
         ]
+    }
+}
+// O(l^d choose l) l=layers, d=dimensions
+fn subsets_of_size(set: Vec<&Coord>, size: usize) -> Vec<Vec<&Coord>> {
+    if set.len() > size {
+        panic!(
+            "There are no subsets of size {} in set of size {}",
+            size,
+            set.len()
+        )
+    } else if set.len() == size {
+        vec![set]
+    } else {
+        let mut first_included = subsets_of_size(Vec::from(&set[1..]), size);
+        let first_excluded: Vec<Vec<&Coord>> = subsets_of_size(Vec::from(&set[1..]), size - 1)
+            .iter()
+            .map(|x| {
+                let mut vec = vec![set[0]];
+                vec.extend_from_slice(x);
+                vec
+            })
+            .collect();
+        first_included.extend(first_excluded);
+        first_included
     }
 }
