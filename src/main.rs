@@ -1,5 +1,6 @@
 pub mod app;
 pub mod cell;
+pub mod render;
 pub mod team;
 
 use crate::app::*;

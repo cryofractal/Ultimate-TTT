@@ -9,7 +9,7 @@ use crate::team::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Coord {
-    coord: Vec<Index>,
+    pub coord: Vec<Index>,
 }
 
 macro_rules! coord {
@@ -26,11 +26,11 @@ const CELL_NUM: usize = 9;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
     // Which layer the cell is in. 0 is the outermost layer.
-    rank: u8,
+    pub rank: u8,
     // Cells contained within the larger cell
-    children: HashMap<Coord, Cell>,
+    pub children: HashMap<Coord, Cell>,
     // Current status of play of the cell
-    state: CellState,
+    pub state: CellState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
