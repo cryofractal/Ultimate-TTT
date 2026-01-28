@@ -47,6 +47,8 @@ pub struct Cell {
     pub children: HashMap<Coord, Cell>,
     // Current status of play of the cell
     pub state: CellState,
+    // Previous path played (in order to undo)
+    pub prev_path: Vec<Coord>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -79,21 +81,23 @@ impl Cell {
             rank: rank,
             children: HashMap::new(),
             state: CellState::Empty,
+            prev_path: Vec::new(),
         }
     }
     ///Updates the cell at path to be caputed by the team with [`team_id`] by recursively telling
     /// the current cell's child with coords `path[0]` to update with path `path[1..]`
     /// and returns whether or not the specific cell [`self`] had its cell state changed
-    pub fn update(&mut self, path: &[Coord], team_id: u8) -> bool {
+    pub fn update(&mut self, path: &Vec<Coord>, team_id: u8) -> bool {
         if path.len() > 0 {
             //Path has layers left -> update the child cell at the next level of coord
             //                      with the current outermost coord removed so it can propperly recurse
             //                      and return false if no update made
+            self.prev_path = path.clone();
             if !self
                 .children
                 .get_mut(&path[0])
                 .unwrap()
-                .update(&path[1..], team_id)
+                .update(&path[1..].to_vec(), team_id)
             {
                 //Short curcuit if no resulting change and propogate the lack of change
                 return false;
@@ -104,6 +108,33 @@ impl Cell {
             return true;
         }
         let check = self.check(team_id, &path[0]);
+        if check != self.state {
+            self.state = check;
+            true
+        } else {
+            false
+        }
+    }
+    pub fn undo(&mut self) -> bool {
+        if self.prev_path.len() > 0 {
+            //Path has layers left -> undo the child cell at the next level of coord
+            //                      with the current outermost coord removed so it can propperly recurse
+            //                      and return false if no change made
+            if !self.children.get_mut(&self.prev_path[0]).unwrap().undo() {
+                //Short curcuit if no resulting change and propogate the lack of change
+                return false;
+            }
+        } else {
+            //Path empty means this is the lowest level -> directly set it to unowned and return that it has changed
+            self.state = CellState::Empty;
+            return true;
+        }
+        let check: CellState;
+        if self.children.values().any(|x| x.state.is_nonempty()) {
+            check = CellState::Contested;
+        } else {
+            check = CellState::Empty;
+        }
         if check != self.state {
             self.state = check;
             true
