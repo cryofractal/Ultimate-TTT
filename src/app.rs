@@ -111,6 +111,10 @@ impl eframe::App for App {
             if ui.button("Reset").clicked() {
                 self.temp_path = Vec::new()
             }
+            if ui.button("Undo").clicked() {
+                self.cell.undo();
+                self.curr_team = 1 - self.curr_team;
+            }
         });
     }
 }
