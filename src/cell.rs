@@ -103,7 +103,7 @@ impl Cell {
             self.state = CellState::Owned(team_id);
             return true;
         }
-        let check = self.check(team_id);
+        let check = self.check(team_id, &path[0]);
         if check != self.state {
             self.state = check;
             true
@@ -111,10 +111,10 @@ impl Cell {
             false
         }
     }
-    ///Recalulates the cell state given that the team with `team_id` has just moved
-    pub fn check(&self, team_id: u8) -> CellState {
+    ///Recalulates the cell state given that the team with `team_id` has just moved in pos
+    pub fn check(&self, team_id: u8, pos: &Coord) -> CellState {
         if self.children.values().any(|x| x.state.is_nonempty()) {
-            if self.captured(team_id) {
+            if self.captured(team_id, pos) {
                 CellState::Owned(team_id)
             } else {
                 CellState::Contested
@@ -125,7 +125,7 @@ impl Cell {
     }
     ///Returns whether a winning line has been added to the cell for the team with [`team_id`]
     /// from them having captured the cell at [`coord`]
-    pub fn captured(&self, team_id: u8) -> bool {
+    pub fn captured(&self, team_id: u8, pos: &Coord) -> bool {
         if self.children.len() != 9 {
             todo!()
         } else {
@@ -135,17 +135,18 @@ impl Cell {
                     .filter(|x| x.1.state == CellState::Owned(team_id))
                     .map(|x| x.0)
                     .collect(),
+                pos,
             )
         }
     }
     ///Returns whether there exists a winning line within [`set`]
-    pub fn captured_set(set: Vec<&Coord>) -> bool {
+    pub fn captured_set(set: Vec<&Coord>, pos: &Coord) -> bool {
         let use_subset_alg = true;
         if use_subset_alg {
             //Use subsets
             // Worst case: O(l^d choose l) l=layers, d=dimensions
             //if any subset of size 3 is a winning line
-            subsets_of_size(set, 3)
+            subsets_of_size_containing(set, 3, vec![pos])
                 .iter()
                 .any(|x| captured_subset(x.clone()))
         } else {
@@ -199,6 +200,36 @@ fn subsets_of_size(set: Vec<&Coord>, size: usize) -> Vec<Vec<&Coord>> {
             .collect();
         first_excluded.extend(first_included); //puts the union of the two into first_excluded
         first_excluded
+    }
+}
+
+/// Returns the set of all subsets of [`set`] with cardinality [`size`] that contain all the elements in [`base`] as a Vec<Vec<>>
+fn subsets_of_size_containing<'a>(
+    set: Vec<&'a Coord>,
+    size: usize,
+    base: Vec<&'a Coord>,
+) -> Vec<Vec<&'a Coord>> {
+    if set.len() < size {
+        //There are no subsets of a size greater than the set
+        Vec::new() //The empty set
+    } else if set.len() == size {
+        //Base case 1
+        //The set is the only subset with the same size as the set
+        vec![set] //The set of the set
+    } else if size == 0 {
+        //Base case 2
+        //The empty set is the only set of size 0 and is a subset of any set
+        vec![Vec::new()] //The set of the empty set
+    } else {
+        //The set of subsets with cardinality `size-base.len()` from set, each with all of base elements
+        subsets_of_size(set, size - base.len())
+            .iter()
+            .map(|x| {
+                let mut vec = base.clone();
+                vec.extend_from_slice(x);
+                vec
+            })
+            .collect()
     }
 }
 
