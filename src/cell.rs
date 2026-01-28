@@ -84,6 +84,13 @@ impl Cell {
             prev_path: Vec::new(),
         }
     }
+    pub fn get(&self, path: &[Coord]) -> &Cell {
+        if path.len() > 0 {
+            self.children.get(&path[0]).unwrap().get(&path[1..])
+        } else {
+            self
+        }
+    }
     ///Updates the cell at path to be caputed by the team with [`team_id`] by recursively telling
     /// the current cell's child with coords `path[0]` to update with path `path[1..]`
     /// and returns whether or not the specific cell [`self`] had its cell state changed
