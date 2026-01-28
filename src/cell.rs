@@ -1,4 +1,8 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::HashMap,
+    ops::{Div, Sub},
+    rc::Rc,
+};
 
 type Index = u8;
 
@@ -21,6 +25,18 @@ macro_rules! coord {
             Coord {coord: vect}
         }
     };
+}
+
+///The difference of two Coords as a Vec<i16>
+fn sub_coords(lhs: &Coord, rhs: &Coord) -> Vec<i16> {
+    if lhs.coord.len() != rhs.coord.len() {
+        panic!("Trying to subtract coords of different sizes")
+    }
+    let mut diff: Vec<i16> = Vec::new();
+    for i in 0..lhs.coord.len() {
+        diff.push((lhs.coord[i]) as i16 - rhs.coord[i] as i16);
+    }
+    diff
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -72,21 +88,29 @@ impl Cell {
             self
         }
     }
+    ///Updates the cell at path to be caputed by the team with [`team_id`] by recursively telling
+    /// the current cell's child with coords `path[0]` to update with path `path[1..]`
+    /// and returns whether or not the specific cell [`self`] had its cell state changed
     pub fn update(&mut self, path: &[Coord], team_id: u8) -> bool {
         if path.len() > 0 {
+            //Path has layers left -> update the child cell at the next level of coord
+            //                      with the current outermost coord removed so it can propperly recurse
+            //                      and return false if no update made
             if !self
                 .children
                 .get_mut(&path[0])
                 .unwrap()
                 .update(&path[1..], team_id)
             {
+                //Short curcuit if no resulting change and propogate the lack of change
                 return false;
             }
         } else {
+            //Path empty means this is the lowest level -> directly set the team to own it and return that it has changed
             self.state = CellState::Owned(team_id);
             return true;
         }
-        let check = self.check(team_id);
+        let check = self.check(team_id, &path[0]);
         if check != self.state {
             self.state = check;
             true
@@ -94,9 +118,10 @@ impl Cell {
             false
         }
     }
-    pub fn check(&self, team_id: u8) -> CellState {
+    ///Recalulates the cell state given that the team with `team_id` has just moved in pos
+    pub fn check(&self, team_id: u8, pos: &Coord) -> CellState {
         if self.children.values().any(|x| x.state.is_nonempty()) {
-            if self.captured(team_id) {
+            if self.captured(team_id, pos) {
                 CellState::Owned(team_id)
             } else {
                 CellState::Contested
@@ -105,29 +130,40 @@ impl Cell {
             CellState::Empty
         }
     }
-    pub fn captured(&self, team_id: u8) -> bool {
+    ///Returns whether a winning line has been added to the cell for the team with [`team_id`]
+    /// from them having captured the cell at [`coord`]
+    pub fn captured(&self, team_id: u8, pos: &Coord) -> bool {
         if self.children.len() != 9 {
             todo!()
         } else {
-            let mut set = HashMap::new();
-            self.children
+            Self::captured_set(
+                self.children
+                    .iter()
+                    .filter(|x| x.1.state == CellState::Owned(team_id))
+                    .map(|x| x.0)
+                    .collect(),
+                pos,
+            )
+        }
+    }
+    ///Returns whether there exists a winning line within [`set`]
+    pub fn captured_set(set: Vec<&Coord>, pos: &Coord) -> bool {
+        let use_subset_alg = true;
+        if use_subset_alg {
+            //Use subsets
+            // Worst case: O(l^d choose l) l=layers, d=dimensions
+            //if any subset of size 3 is a winning line
+            subsets_of_size_containing(set, 3, vec![pos])
                 .iter()
-                .filter(|x| x.1.state == CellState::Owned(team_id))
-                .map(|x| x.0)
-                .for_each(|x| {
-                    set.insert(x, ());
-                });
-            Self::captured_set(set)
+                .any(|x| captured_subset(x.clone()))
+        } else {
+            //Use lines alg
+            // O(l2^d) l=layers, d=dimensions
+            todo!()
         }
     }
-    pub fn captured_set(set: HashMap<&Coord, ()>) -> bool {
-        for row in Self::three_in_a_rows() {
-            if row.iter().all(|x| set.contains_key(x)) {
-                return true;
-            }
-        }
-        false
-    }
+
+    /// Returns the set of potential lines on a 3x3 board
     fn three_in_a_rows() -> Vec<[Coord; 3]> {
         vec![
             [coord![0, 0], coord![0, 1], coord![0, 2]],
@@ -140,4 +176,80 @@ impl Cell {
             [coord![0, 1], coord![1, 1], coord![2, 1]],
         ]
     }
+}
+/// Returns the set of all subsets of [`set`] with cardinality [`size`] as a Vec<Vec<>>
+fn subsets_of_size(set: Vec<&Coord>, size: usize) -> Vec<Vec<&Coord>> {
+    if set.len() < size {
+        //There are no subsets of a size greater than the set
+        Vec::new() //The empty set
+    } else if set.len() == size {
+        //Base case 1
+        //The set is the only subset with the same size as the set
+        vec![set] //The set of the set
+    } else if size == 0 {
+        //Base case 2
+        //The empty set is the only set of size 0 and is a subset of any set
+        vec![Vec::new()] //The set of the empty set
+    } else {
+        //Recursive step
+        //Every subset will either include or exclude the first element.
+        //The ones that exclude are just the subsets of the same size of (set - first element)
+        let mut first_excluded = subsets_of_size(Vec::from(&set[1..]), size);
+        //The ones that contain the first element are going to be the subsets of size-1 of (set - first element)
+        //but with the first element added to each set
+        let first_included: Vec<Vec<&Coord>> = subsets_of_size(Vec::from(&set[1..]), size - 1)
+            .iter()
+            .map(|x| {
+                let mut vec = vec![set[0]];
+                vec.extend_from_slice(x);
+                vec
+            })
+            .collect();
+        first_excluded.extend(first_included); //puts the union of the two into first_excluded
+        first_excluded
+    }
+}
+
+/// Returns the set of all subsets of [`set`] with cardinality [`size`] that contain all the elements in [`base`] as a Vec<Vec<>>
+fn subsets_of_size_containing<'a>(
+    set: Vec<&'a Coord>,
+    size: usize,
+    base: Vec<&'a Coord>,
+) -> Vec<Vec<&'a Coord>> {
+    if set.len() < size {
+        //There are no subsets of a size greater than the set
+        Vec::new() //The empty set
+    } else if set.len() == size {
+        //Base case 1
+        //The set is the only subset with the same size as the set
+        vec![set] //The set of the set
+    } else if size == 0 {
+        //Base case 2
+        //The empty set is the only set of size 0 and is a subset of any set
+        vec![Vec::new()] //The set of the empty set
+    } else {
+        //The set of subsets with cardinality `size-base.len()` from set, each with all of base elements
+        subsets_of_size(set, size - base.len())
+            .iter()
+            .map(|x| {
+                let mut vec = base.clone();
+                vec.extend_from_slice(x);
+                vec
+            })
+            .collect()
+    }
+}
+
+/// Returns whether all of [`set`] is in the same line
+fn captured_subset(mut set: Vec<&Coord>) -> bool {
+    //Sorts the set lexigraphically so the differences from the next step should be the same
+    set.sort_by_key(|x| x.coord.clone());
+    let base_diff = sub_coords(set[0], set[1]);
+    //Makes sure every adjacent pair is the same difference as the base difference
+    for i in 2..set.len() {
+        if sub_coords(set[i - 1], set[i]) != base_diff {
+            return false;
+        }
+    }
+    true
 }
