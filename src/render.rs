@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use crate::{
     cell::{Cell, CellState, Coord},
+    coord,
     team::Team,
 };
-use egui::{Color32, Pos2, Rect, Ui, pos2, vec2};
+use egui::{Button, Color32, Pos2, Rect, Ui, pos2, vec2};
 
 impl Coord {
     pub fn to_pos2(&self, scale: f32, base: Pos2) -> Pos2 {
@@ -12,6 +13,24 @@ impl Coord {
             panic!("This is not a 2d position!")
         } else {
             base + scale * vec2(self.coord[0] as f32, -(self.coord[1] as f32))
+        }
+    }
+}
+
+pub fn render_buttons(ui: &mut Ui, curr_cell: &Cell, path: &mut Vec<Coord>, base: Pos2, size: f32) {
+    for coord in curr_cell.children.keys() {
+        if ui
+            .put(
+                Rect::from_two_pos(
+                    coord.to_pos2(size, base),
+                    coord![coord.coord[0] + 1, coord.coord[1] + 1].to_pos2(size, base),
+                ),
+                Button::new(format!("[{}, {}]", coord.coord[0], coord.coord[1])),
+            )
+            .clicked()
+        {
+            path.push(coord.clone());
+            return;
         }
     }
 }

@@ -65,6 +65,13 @@ impl Cell {
             state: CellState::Empty,
         }
     }
+    pub fn get(&self, path: &[Coord]) -> &Cell {
+        if path.len() > 0 {
+            self.children.get(&path[0]).unwrap().get(&path[1..])
+        } else {
+            self
+        }
+    }
     pub fn update(&mut self, path: &[Coord], team_id: u8) -> bool {
         if path.len() > 0 {
             if !self
