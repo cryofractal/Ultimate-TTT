@@ -43,7 +43,7 @@ impl App {
         // );
         // dbg!(&cell.state);
         App {
-            cell: generate_rank_n(2),
+            cell: generate_rank_n(3),
             scale: 300.0,
             divisions: 3,
             base: { pos2(0.0, cc.egui_ctx.screen_rect().max.y) },
@@ -106,7 +106,7 @@ impl eframe::App for App {
             if curr_cell.children.is_empty() {
                 self.cell.update(&self.temp_path, self.curr_team);
                 self.curr_team = 1 - self.curr_team;
-                self.temp_path = Vec::new();
+                self.temp_path.remove(0);
             }
             if ui.button("Reset").clicked() {
                 self.temp_path = Vec::new()

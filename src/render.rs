@@ -30,6 +30,7 @@ pub fn render_buttons(ui: &mut Ui, curr_cell: &Cell, path: &mut Vec<Coord>, base
             .clicked()
         {
             path.push(coord.clone());
+            println!("{:?}", path);
             return;
         }
     }
