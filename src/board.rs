@@ -2,32 +2,8 @@ type Index = u8;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub struct Coord {
-    x: u8,
-    y: u8,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum CellState {
-    Owned(u8),
-    Empty,
-    Contested,
-}
-
-impl CellState {
-    pub fn is_nonempty(&self) -> bool {
-        match self {
-            CellState::Owned(_) => true,
-            CellState::Empty => false,
-            CellState::Contested => true,
-        }
-    }
-    pub fn owned(&self) -> Option<u8> {
-        if let CellState::Owned(t) = self {
-            Some(*t)
-        } else {
-            None
-        }
-    }
+    pub x: u8,
+    pub y: u8,
 }
 
 pub struct Board {
@@ -73,7 +49,15 @@ impl Board {
             Some(&self.state_array[(self.grid_num() * index)..(self.grid_num() * (index + 1))])
         }
     }
+    pub fn parent(&self, index: usize) -> Option<usize> {
+        if index == 1 {
+            None
+        } else {
+            Some(index / self.grid_num())
+        }
+    }
 
+    ///IMPORTANT FOR SAFETY: this cannot return something out of bounds
     pub fn path_to_index(&self, path: &[Coord]) -> usize {
         //check that the nesting is no deeper than rank
         if path.len() > self.critical_index {
@@ -95,5 +79,43 @@ impl Board {
             x: (index / self.layer as usize) as u8,
             y: (index % self.layer as usize) as u8,
         }
+    }
+    pub fn update_at(&mut self, index: usize, id: u8, rel_position: usize) -> bool {
+        if index >= self.critical_index {
+            true
+        } else {
+            match self.state_array[index] {
+                0 => {
+                    self.state_array[index] = 1;
+                    true
+                }
+                1 => {
+                    if self.is_solved(
+                        self.children(index).unwrap(),
+                        id,
+                        self.rel_index_to_coord(rel_position),
+                    ) {
+                        self.state_array[index] = id;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+    pub fn update_ascending(&mut self, start: usize, id: u8) {
+        let mut curr = start;
+        while let Some(next) = self.parent(curr)
+            && self.update_at(next, id, curr - (next * self.grid_num()))
+        {
+            curr = next;
+        }
+    }
+    pub fn move_at(&mut self, path: &[Coord], id: u8) {
+        let ind = self.path_to_index(path);
+        self.state_array[ind] = id;
+        self.update_ascending(ind, id);
     }
 }
