@@ -1,8 +1,9 @@
 pub mod app;
-pub mod cell;
+pub mod board;
 pub mod render;
 pub mod team;
 pub mod test;
+pub mod win_check;
 
 use crate::app::*;
 

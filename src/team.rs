@@ -1,4 +1,3 @@
-use egui::*;
 #[derive(Clone, Debug)]
 pub struct Team {
     pub name: String,

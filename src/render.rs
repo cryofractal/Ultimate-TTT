@@ -1,98 +1,61 @@
-use std::collections::HashMap;
+use crate::{board::Board, team::Team};
+use egui::{Color32, Rect, Ui, vec2};
 
-use crate::{
-    cell::{Cell, CellState, Coord},
-    coord,
-    team::Team,
-};
-use egui::{Button, Color32, Pos2, Rect, Ui, pos2, vec2};
+const DEFAULT_COLOR: Color32 = Color32::GRAY;
 
-impl Coord {
-    pub fn to_pos2(&self, scale: f32, base: Pos2) -> Pos2 {
-        if self.coord.len() != 2 {
-            panic!("This is not a 2d position!")
-        } else {
-            base + scale * vec2(self.coord[0] as f32, -(self.coord[1] as f32))
-        }
-    }
-}
-
-pub fn render_buttons(ui: &mut Ui, curr_cell: &Cell, path: &mut Vec<Coord>, base: Pos2, size: f32) {
-    for coord in curr_cell.children.keys() {
-        if ui
-            .put(
-                Rect::from_two_pos(
-                    coord.to_pos2(size, base),
-                    coord![coord.coord[0] + 1, coord.coord[1] + 1].to_pos2(size, base),
-                ),
-                Button::new(format!("[{}, {}]", coord.coord[0], coord.coord[1])),
-            )
-            .clicked()
-        {
-            path.push(coord.clone());
-            return;
-        }
-    }
-}
-
-impl Cell {
+impl Board {
     pub fn render(
         &self,
         ui: &mut Ui,
         rect: Rect,
-        scale: f32,
-        base: Pos2,
-        teams: &HashMap<u8, Team>,
-        divide: u8,
+        curr_ind: usize,
+        depth: u8,
+        team: &Vec<Team>,
+        stroke_size: f32,
     ) {
-        match self.state {
-            crate::cell::CellState::Owned(t) => {
-                ui.painter()
-                    .rect_filled(rect, 0.0, teams.get(&t).unwrap().color);
-            }
-            crate::cell::CellState::Empty => {}
-            crate::cell::CellState::Contested => {
-                for (pos, cell) in self.children.iter() {
-                    let bottom = pos.to_pos2(scale, base);
-                    let top = Coord {
-                        coord: vec![pos.coord[0] + 1, pos.coord[1] + 1],
-                    }
-                    .to_pos2(scale, base);
-                    cell.render(
+        let curr_val = self.state_array[curr_ind];
+        if curr_val < 254 {
+            ui.painter().rect(
+                rect,
+                0,
+                team[curr_val as usize].color,
+                (stroke_size, Color32::BLACK),
+                egui::StrokeKind::Inside,
+            );
+        } else {
+            if let Some(children) = self.children_base(curr_ind)
+                && depth > 0
+            {
+                for i in 0..self.grid_num() {
+                    let new_size = rect.size() / self.layer as f32;
+                    let coord = self.rel_index_to_coord(i);
+                    let min =
+                        rect.min + vec2(coord.x as f32 * new_size.x, coord.y as f32 * new_size.y);
+                    let new_rect = Rect::from_min_size(min, new_size).shrink(stroke_size / 2.0);
+                    self.render(
                         ui,
-                        Rect::from_points(&[top, bottom]),
-                        scale / (divide as f32),
-                        bottom,
-                        teams,
-                        divide,
+                        new_rect,
+                        children + i,
+                        depth - 1,
+                        team,
+                        stroke_size / 2.0,
                     );
                 }
+                ui.painter().rect_stroke(
+                    rect,
+                    0,
+                    (stroke_size, Color32::BLACK),
+                    egui::StrokeKind::Inside,
+                );
+            } else {
+                ui.painter().rect(
+                    rect,
+                    0,
+                    DEFAULT_COLOR,
+                    (stroke_size, Color32::BLACK),
+                    egui::StrokeKind::Inside,
+                );
             }
-        }
-    }
-    pub fn render_border(&self, ui: &mut Ui, rect: Rect, scale: f32, base: Pos2, divide: u8) {
-        ui.painter().rect_stroke(
-            rect,
-            0.0,
-            (scale * 0.1, Color32::BLACK),
-            egui::StrokeKind::Middle,
-        );
-        if let CellState::Owned(_) = self.state {
-            return;
-        }
-        for (pos, cell) in self.children.iter() {
-            let bottom = pos.to_pos2(scale, base);
-            let top = Coord {
-                coord: vec![pos.coord[0] + 1, pos.coord[1] + 1],
-            }
-            .to_pos2(scale, base);
-            cell.render_border(
-                ui,
-                Rect::from_points(&[top, bottom]),
-                scale / (divide as f32),
-                bottom,
-                divide,
-            );
         }
     }
 }
