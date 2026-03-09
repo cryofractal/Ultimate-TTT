@@ -11,8 +11,6 @@ pub struct Board {
     pub rank: u8,
     //The number of layers in each cell
     pub layer: u8,
-    //The number of dimensions of each cell
-    pub dim: u8,
     // Current statuses of play for each cell
     pub state_array: Vec<u8>,
     // Previous path played (in order to undo)
@@ -22,14 +20,13 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new(rank: u8, layer: u8, dim: u8) -> Self {
-        let grid_num = (layer as usize).pow(dim as u32);
-        let num = grid_num.pow(rank as u32) * (grid_num) / (grid_num - 1);
+    pub fn new(rank: u8, layer: u8) -> Self {
+        let grid_num = (layer as usize).pow(2);
+        let num = (grid_num.pow(rank as u32) * (grid_num) / (grid_num - 1)) + 3;
         let cr_index = num - grid_num.pow(rank as u32);
         Board {
             rank: rank,
             layer: layer,
-            dim: dim,
             state_array: vec![0; num],
             prev_path: Vec::new(),
             critical_index: cr_index,

@@ -1,6 +1,5 @@
 pub mod app;
 pub mod board;
-pub mod cell;
 pub mod render;
 pub mod team;
 pub mod test;

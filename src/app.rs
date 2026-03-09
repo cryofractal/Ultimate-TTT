@@ -4,18 +4,15 @@ use egui::{CentralPanel, Color32, Pos2, Rect, Ui, pos2};
 use itertools::Itertools;
 
 use crate::{
-    cell::{Cell, Coord},
-    coord,
+    board::{Board, Coord},
     render::render_buttons,
     team::Team,
-    test::{self, generate_rank_n},
 };
 
 pub struct App {
-    cell: Cell,
+    board: Board,
     scale: f32,
     divisions: u8,
-    base: Pos2,
     teams: HashMap<u8, Team>,
     temp_path: Vec<Coord>,
     curr_team: u8,
@@ -43,16 +40,15 @@ impl App {
         // );
         // dbg!(&cell.state);
         App {
-            cell: generate_rank_n(2),
+            board: Board::new(2, 3),
             scale: 300.0,
             divisions: 3,
-            base: { pos2(0.0, cc.egui_ctx.screen_rect().max.y) },
             teams: HashMap::from([
                 (
                     0,
                     Team {
                         name: String::from("X"),
-                        id: 0,
+                        id: 2,
                         color: Color32::RED,
                     },
                 ),
@@ -60,7 +56,7 @@ impl App {
                     1,
                     Team {
                         name: String::from("O"),
-                        id: 1,
+                        id: 3,
                         color: Color32::BLUE,
                     },
                 ),
