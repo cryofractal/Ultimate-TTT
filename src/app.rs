@@ -1,4 +1,4 @@
-use egui::{CentralPanel, Color32, Id, Key, Rect, Response, Sense, Ui, Vec2};
+use egui::{CentralPanel, Color32, Id, Key, Rect, Response, Sense, Slider, Ui, Vec2};
 
 use crate::{
     board::Board,
@@ -28,6 +28,9 @@ pub struct App {
     curr_team: u8,
     prev_moves: Vec<usize>,
     depth: u8,
+    newboard_rank: u8,
+    newboard_layer: u8,
+    newboard_in_a_row: u8,
 }
 
 impl App {
@@ -52,7 +55,7 @@ impl App {
         // );
         // dbg!(&cell.state);
         App {
-            board: Board::new(10, 3, 3),
+            board: Board::new(3, 3, 3),
             teams: vec![
                 Team {
                     name: "X".to_string(),
@@ -68,7 +71,10 @@ impl App {
             curr_team: 0,
             curr_ind: 0,
             prev_moves: vec![],
-            depth: 8,
+            depth: 3,
+            newboard_in_a_row: 3,
+            newboard_layer: 3,
+            newboard_rank: 3,
         }
     }
     pub fn proc_input_at(&mut self, ind: usize) {
@@ -130,6 +136,21 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         CentralPanel::default().show(ctx, |ui| {
             let screen_size = ui.available_rect_before_wrap();
+            ui.label("In a Row");
+            ui.add(Slider::new(&mut self.newboard_in_a_row, 2..=15));
+            ui.label("Layer");
+            ui.add(Slider::new(&mut self.newboard_layer, 2..=15));
+            ui.label("Rank");
+            ui.add(Slider::new(&mut self.newboard_rank, 2..=12));
+            if ui.button("Generate New Board").clicked() {
+                self.board = Board::new(
+                    self.newboard_rank,
+                    self.newboard_layer,
+                    self.newboard_in_a_row,
+                )
+            }
+            ui.label("Rendering Depth");
+            ui.add(Slider::new(&mut self.depth, 1..=self.board.rank));
             let rect_size = Vec2::splat(screen_size.size().y);
             let display_rect = Rect::from_center_size(screen_size.center(), rect_size);
             self.board.render(
