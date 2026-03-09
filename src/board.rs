@@ -1,31 +1,9 @@
 type Index = u8;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub struct Coord {
-    pub coord: Vec<Index>,
-}
-
-#[macro_export]
-macro_rules! coord {
-    ($($x:expr),*) => {
-        {
-            let mut vect = Vec::new();
-            $(vect.push($x);)*
-            Coord {coord: vect}
-        }
-    };
-}
-
-///The difference of two Coords as a Vec<i16>
-fn sub_coords(lhs: &Coord, rhs: &Coord) -> Vec<i16> {
-    if lhs.coord.len() != rhs.coord.len() {
-        panic!("Trying to subtract coords of different sizes")
-    }
-    let mut diff: Vec<i16> = Vec::new();
-    for i in 0..lhs.coord.len() {
-        diff.push((lhs.coord[i]) as i16 - rhs.coord[i] as i16);
-    }
-    diff
+    x: u8,
+    y: u8,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,56 +38,62 @@ pub struct Board {
     //The number of dimensions of each cell
     pub dim: u8,
     // Current statuses of play for each cell
-    pub state_array: Vec<CellState>,
+    pub state_array: Vec<u8>,
     // Previous path played (in order to undo)
     pub prev_path: Vec<Coord>,
+    // The index of the first leaf
+    critical_index: usize,
 }
 
 impl Board {
     pub fn new(rank: u8, layer: u8, dim: u8) -> Self {
+        let grid_num = (layer as usize).pow(dim as u32);
+        let num = grid_num.pow(rank as u32) * (grid_num) / (grid_num - 1);
+        let cr_index = num - grid_num.pow(rank as u32);
         Board {
             rank: rank,
             layer: layer,
             dim: dim,
-            state_array: [],
+            state_array: vec![0; num],
             prev_path: Vec::new(),
+            critical_index: cr_index,
         }
     }
-    pub fn get(&self, path: &[Coord]) -> &CellState {
-        self.state_array[self.pathToIndex(path)]
+    pub fn grid_num(&self) -> usize {
+        self.layer as usize * self.layer as usize
+    }
+    pub fn get(&self, path: &[Coord]) -> u8 {
+        self.state_array[self.path_to_index(path)]
     }
 
-    pub fn children(&self, path: Vec<Coord>) -> &[CellState] {
-        //check if the rank is
-        if path.len() >= self.rank {
-            []
+    pub fn children(&self, index: usize) -> Option<&[u8]> {
+        if index > self.critical_index {
+            None
         } else {
-            let ind = self.pathToIndex(path);
-            state_array[pow(self.layer, self.dim) * ind..pow(self.layer, self.dim) * (ind + 1)]
+            Some(&self.state_array[(self.grid_num() * index)..(self.grid_num() * (index + 1))])
         }
     }
 
-    pub fn pathToIndex(&self, path: Vec<Coord>) -> Index {
+    pub fn path_to_index(&self, path: &[Coord]) -> usize {
         //check that the nesting is no deeper than rank
-        if path.len() > self.rank {
-            todo!();
+        if path.len() > self.critical_index {
+            panic!("Path is too long!");
         }
 
-        let ind: Index = 0;
+        let mut ind = 1;
         for i in 0..path.len() {
-            ind = pow(self.layer, self.dim) * ind + self.coordToRelativeIndex(path[i]);
+            ind = self.grid_num() * ind + self.coord_to_relative_index(path[i]);
         }
         ind
     }
 
-    pub fn coordToRelativeIndex(&self, pos: Coord) -> Index {
-        //check that the size of the coord is the same as the dimension
-        if pos.len() != self.dim {
-            todo!();
-        }
-        let ind: Index = 0;
-        for i in 0..pos.len() {
-            ind = pow(self.layer, self.dim) * ind + pos[i];
+    pub fn coord_to_relative_index(&self, pos: Coord) -> usize {
+        (pos.x as usize * self.layer as usize) + pos.y as usize
+    }
+    pub fn rel_index_to_coord(&self, index: usize) -> Coord {
+        Coord {
+            x: (index / self.layer as usize) as u8,
+            y: (index % self.layer as usize) as u8,
         }
     }
 }
