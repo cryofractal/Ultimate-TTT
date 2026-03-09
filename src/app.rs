@@ -5,7 +5,7 @@ use itertools::Itertools;
 
 use crate::{
     board::{Board, Coord},
-    render::render_buttons,
+    //render::render_buttons,
     team::Team,
 };
 
