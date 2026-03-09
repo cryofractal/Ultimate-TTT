@@ -46,6 +46,13 @@ impl Board {
             Some(&self.state_array[(self.grid_num() * index)..(self.grid_num() * (index + 1))])
         }
     }
+    pub fn children_base(&self, index: usize) -> Option<usize> {
+        if index > self.critical_index {
+            None
+        } else {
+            Some(self.grid_num() * index)
+        }
+    }
     pub fn parent(&self, index: usize) -> Option<usize> {
         if index == 1 {
             None
