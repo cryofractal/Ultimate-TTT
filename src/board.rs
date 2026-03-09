@@ -1,5 +1,3 @@
-type Index = u8;
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub struct Coord {
     pub x: u8,
@@ -7,11 +5,15 @@ pub struct Coord {
 }
 
 pub struct Board {
+    // Number of squares in a row to solve a cell
+    pub in_a_row: u8,
     // The largest amount of nesting on the Board
     pub rank: u8,
     //The number of layers in each cell
     pub layer: u8,
     // Current statuses of play for each cell
+    // 255 - CONTESTED
+    // 255 > i - OWNED
     pub state_array: Vec<u8>,
     // Previous path played (in order to undo)
     pub prev_path: Vec<Coord>,
@@ -20,14 +22,15 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new(rank: u8, layer: u8) -> Self {
+    pub fn new(rank: u8, layer: u8, in_a_row: u8) -> Self {
         let grid_num = (layer as usize).pow(2);
-        let num = (grid_num.pow(rank as u32) * (grid_num) / (grid_num - 1)) + 3;
+        let num = grid_num.pow(rank as u32) * (grid_num) / (grid_num - 1);
         let cr_index = num - grid_num.pow(rank as u32);
         Board {
-            rank: rank,
-            layer: layer,
-            state_array: vec![0; num],
+            in_a_row,
+            rank,
+            layer,
+            state_array: vec![255; num],
             prev_path: Vec::new(),
             critical_index: cr_index,
         }
@@ -40,24 +43,30 @@ impl Board {
     }
 
     pub fn children(&self, index: usize) -> Option<&[u8]> {
-        if index > self.critical_index {
+        if index >= self.critical_index {
             None
         } else {
-            Some(&self.state_array[(self.grid_num() * index)..(self.grid_num() * (index + 1))])
+            Some(
+                &self.state_array
+                    [((self.grid_num() * index) + 1)..=(self.grid_num() * (index + 1))],
+            )
         }
     }
+    pub fn is_leaf(&self, index: usize) -> bool {
+        index >= self.critical_index
+    }
     pub fn children_base(&self, index: usize) -> Option<usize> {
-        if index > self.critical_index {
+        if index >= self.critical_index {
             None
         } else {
-            Some(self.grid_num() * index)
+            Some((self.grid_num() * index) + 1)
         }
     }
     pub fn parent(&self, index: usize) -> Option<usize> {
-        if index == 1 {
+        if index == 0 {
             None
         } else {
-            Some(index / self.grid_num())
+            Some((index - 1) / self.grid_num())
         }
     }
 
@@ -80,8 +89,8 @@ impl Board {
     }
     pub fn rel_index_to_coord(&self, index: usize) -> Coord {
         Coord {
-            x: (index / self.layer as usize) as u8,
-            y: (index % self.layer as usize) as u8,
+            x: (index % self.layer as usize) as u8,
+            y: (index / self.layer as usize) as u8,
         }
     }
     pub fn update_at(&mut self, index: usize, id: u8, rel_position: usize) -> bool {
@@ -89,11 +98,7 @@ impl Board {
             true
         } else {
             match self.state_array[index] {
-                0 => {
-                    self.state_array[index] = 1;
-                    true
-                }
-                1 => {
+                255 => {
                     if self.is_solved(
                         self.children(index).unwrap(),
                         id,
@@ -117,9 +122,22 @@ impl Board {
             curr = next;
         }
     }
+    pub fn ascend_set_contested(&mut self, start: usize) {
+        let mut curr = start;
+        while let Some(next) = self.parent(curr) {
+            curr = next;
+            self.state_array[next] = 255;
+        }
+    }
     pub fn move_at(&mut self, path: &[Coord], id: u8) {
-        let ind = self.path_to_index(path);
-        self.state_array[ind] = id;
-        self.update_ascending(ind, id);
+        self.move_at_index(self.path_to_index(path), id);
+    }
+    pub fn move_at_index(&mut self, index: usize, id: u8) {
+        self.state_array[index] = id;
+        self.update_ascending(index, id);
+    }
+    pub fn undo_at(&mut self, index: usize) {
+        self.state_array[index] = 255;
+        self.ascend_set_contested(index);
     }
 }

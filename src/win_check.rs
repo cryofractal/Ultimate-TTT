@@ -16,18 +16,19 @@ impl Board {
                 .map(|x| self.rel_index_to_coord(x))
                 .collect(),
             pos,
+            self.in_a_row as usize,
         )
     }
 }
 
 ///Returns whether there exists a winning line within [`set`]
-fn captured_set(set: Vec<Coord>, pos: Coord) -> bool {
+fn captured_set(set: Vec<Coord>, pos: Coord, in_a_row: usize) -> bool {
     let use_subset_alg = true;
     if use_subset_alg {
         //Use subsets
         // Worst case: O(l^d choose l) l=layers, d=dimensions
         //if any subset of size 3 is a winning line
-        subsets_of_size_containing(set, 3, vec![pos])
+        subsets_of_size_containing(set, in_a_row, vec![pos])
             .iter()
             .any(|x| captured_subset(x.clone()))
     } else {
