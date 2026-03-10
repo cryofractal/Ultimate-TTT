@@ -16,7 +16,7 @@ pub fn default_teams() -> Vec<Team> {
         },
         Team {
             name: "O".to_string(),
-            id: 0,
+            id: 1,
             color: Color32::BLUE,
         },
     ]
