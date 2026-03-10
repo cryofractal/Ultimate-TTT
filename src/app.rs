@@ -108,6 +108,11 @@ impl App {
                         && let Some(undo) = self.prev_moves.pop()
                     {
                         self.board.undo_at(undo);
+                        self.correct_box = if let Some(prev) = self.prev_moves.last() {
+                            self.board.get_next_correct_move_box(*prev).unwrap()
+                        } else {
+                            0
+                        }
                     }
                 }
             })

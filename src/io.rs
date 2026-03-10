@@ -51,6 +51,7 @@ impl App {
             let mov = vals[ind]?;
             app.board
                 .move_at_index(mov, ((ind - 4) % app.teams.len()) as u8);
+            app.prev_moves.push(mov);
         }
         if vals.len() > 4
             && let Some(v) = vals.last()
