@@ -70,22 +70,32 @@ impl Board {
         }
     }
 
-    ///IMPORTANT FOR SAFETY: this cannot return something out of bounds
     pub fn path_to_index(&self, path: &[Coord]) -> usize {
         //check that the nesting is no deeper than rank
         if path.len() > self.critical_index {
             panic!("Path is too long!");
         }
 
-        let mut ind = 1;
+        let mut ind = 0;
         for i in 0..path.len() {
-            ind = self.grid_num() * ind + self.coord_to_relative_index(path[i]);
+            ind = self.children_base(ind).unwrap() + self.coord_to_relative_index(path[i]);
         }
         ind
     }
-
+    fn objective_index_to_rel_coord(&self, index: usize) -> Option<Coord> {
+        Some(self.rel_index_to_coord(index - self.children_base(self.parent(index)?)?))
+    }
+    pub fn index_to_path(&self, index: usize) -> Vec<Coord> {
+        let mut v = vec![];
+        let mut curr = index;
+        while let Some(next) = self.parent(curr) {
+            v.push(self.objective_index_to_rel_coord(curr).unwrap());
+            curr = next;
+        }
+        v.into_iter().rev().collect()
+    }
     pub fn coord_to_relative_index(&self, pos: Coord) -> usize {
-        (pos.x as usize * self.layer as usize) + pos.y as usize
+        (pos.y as usize * self.layer as usize) + pos.x as usize
     }
     pub fn rel_index_to_coord(&self, index: usize) -> Coord {
         Coord {
@@ -139,5 +149,33 @@ impl Board {
     pub fn undo_at(&mut self, index: usize) {
         self.state_array[index] = 255;
         self.ascend_set_contested(index);
+    }
+    pub fn has_ancestor(&self, index: usize, ancestor: usize) -> bool {
+        let mut curr = index;
+        while let Some(next) = self.parent(curr)
+            && next >= ancestor
+        {
+            curr = next;
+            if curr == ancestor {
+                return true;
+            }
+        }
+        false
+    }
+    fn get_first_past_captured(&self, start: usize) -> Option<usize> {
+        let mut curr = start;
+        let mut curr_return = Some(start);
+        while let Some(next) = self.parent(curr) {
+            if self.state_array[curr] < 255 {
+                curr_return = self.parent(curr);
+            }
+            curr = next;
+        }
+        curr_return
+    }
+    pub fn get_next_correct_move_box(&self, index: usize) -> Option<usize> {
+        let path = self.index_to_path(index);
+        let start = self.path_to_index(&path[1..]);
+        self.get_first_past_captured(start)
     }
 }

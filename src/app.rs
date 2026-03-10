@@ -31,6 +31,7 @@ pub struct App {
     newboard_rank: u8,
     newboard_layer: u8,
     newboard_in_a_row: u8,
+    correct_box: usize,
 }
 
 impl App {
@@ -55,7 +56,7 @@ impl App {
         // );
         // dbg!(&cell.state);
         App {
-            board: Board::new(3, 3, 3),
+            board: Board::new(2, 3, 3),
             teams: vec![
                 Team {
                     name: "X".to_string(),
@@ -75,6 +76,7 @@ impl App {
             newboard_in_a_row: 3,
             newboard_layer: 3,
             newboard_rank: 3,
+            correct_box: 0,
         }
     }
     pub fn proc_input_at(&mut self, ind: usize) {
@@ -82,8 +84,11 @@ impl App {
             && let Some(base) = self.board.children_base(self.curr_ind)
         {
             if self.board.is_leaf(base + ind) {
-                if self.board.state_array[base + ind] == 255 {
+                if self.board.state_array[base + ind] == 255
+                    && self.board.has_ancestor(base + ind, self.correct_box)
+                {
                     self.board.move_at_index(base + ind, self.curr_team);
+                    self.correct_box = self.board.get_next_correct_move_box(base + ind).unwrap();
                     self.prev_moves.push(base + ind);
                     self.curr_team = 1 - self.curr_team;
                     self.curr_ind = 0;
@@ -147,7 +152,12 @@ impl eframe::App for App {
                     self.newboard_rank,
                     self.newboard_layer,
                     self.newboard_in_a_row,
-                )
+                );
+                self.curr_team = 0;
+                self.correct_box = 0;
+                self.curr_ind = 0;
+                self.depth = self.newboard_rank.min(5);
+                self.prev_moves = vec![];
             }
             ui.label("Rendering Depth");
             ui.add(Slider::new(&mut self.depth, 1..=self.board.rank));
@@ -160,6 +170,7 @@ impl eframe::App for App {
                 self.depth,
                 &self.teams,
                 10.0,
+                self.correct_box,
             );
             self.input(ui);
             let resp = ui.interact(ui.available_rect_before_wrap(), Id::new(10), Sense::all());
