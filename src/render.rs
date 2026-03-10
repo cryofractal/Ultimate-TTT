@@ -12,6 +12,7 @@ impl Board {
         depth: u8,
         team: &Vec<Team>,
         stroke_size: f32,
+        corr_box: usize,
     ) {
         let curr_val = self.state_array[curr_ind];
         if curr_val < 254 {
@@ -39,12 +40,20 @@ impl Board {
                         depth - 1,
                         team,
                         stroke_size / 2.0,
+                        corr_box,
                     );
                 }
                 ui.painter().rect_stroke(
                     rect,
                     0,
-                    (stroke_size, Color32::BLACK),
+                    (
+                        stroke_size,
+                        if curr_ind == corr_box {
+                            Color32::GOLD
+                        } else {
+                            Color32::BLACK
+                        },
+                    ),
                     egui::StrokeKind::Inside,
                 );
             } else {
