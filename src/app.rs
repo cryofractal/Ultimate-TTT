@@ -24,53 +24,24 @@ const BACK_KEY: Key = Key::Backspace;
 const UNDO_KEY: Key = Key::Z;
 const CORRECT_BOX_KEY: Key = Key::Enter;
 
-pub struct App {
+pub struct Game {
     pub board: Board,
     pub teams: Vec<Team>,
     pub curr_ind: usize,
     pub curr_team: u8,
     pub prev_moves: Vec<usize>,
-    pub depth: u8,
-    pub newboard_rank: u8,
-    pub newboard_layer: u8,
-    pub newboard_in_a_row: u8,
     pub correct_box: usize,
-    pub curr_logfile_path: String,
 }
 
-impl App {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        // let mut cell = generate_rank_n(2);
-        // let moves = vec![
-        //     vec![coord![0, 1], coord![1, 0]],
-        //     vec![coord![0, 1], coord![1, 2]],
-        //     vec![coord![0, 1], coord![1, 1]],
-        //     vec![coord![0, 0], coord![2, 2]],
-        // ];
-        // for m in moves {
-        //     cell.update(&m, 0);
-        // }
-        // dbg!(
-        //     &cell
-        //         .children
-        //         .get(&coord![0, 0])
-        //         .unwrap()
-        //         .children
-        //         .get(&coord![2, 2])
-        // );
-        // dbg!(&cell.state);
-        App {
-            board: Board::new(2, 3, 3),
+impl Game {
+    pub fn new(rank: u8, layers: u8, in_a_row: u8) -> Self {
+        Game {
+            board: Board::new(rank, layers, in_a_row),
             teams: default_teams(),
             curr_team: 0,
             curr_ind: 0,
             prev_moves: vec![],
-            depth: 3,
-            newboard_in_a_row: 3,
-            newboard_layer: 3,
-            newboard_rank: 3,
             correct_box: 0,
-            curr_logfile_path: String::new(),
         }
     }
     pub fn proc_input_at(&mut self, ind: usize) {
@@ -92,6 +63,7 @@ impl App {
             }
         }
     }
+
     pub fn input(&mut self, ui: &Ui) {
         if ui.ctx().memory(|x| x.focused().is_none()) {
             ui.input(|input| {
@@ -142,56 +114,98 @@ impl App {
     }
 }
 
+pub struct App {
+    pub game: Game,
+    pub depth: u8,
+    pub newboard_rank: u8,
+    pub newboard_layer: u8,
+    pub newboard_in_a_row: u8,
+    pub curr_logfile_path: String,
+}
+
+impl App {
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        // let mut cell = generate_rank_n(2);
+        // let moves = vec![
+        //     vec![coord![0, 1], coord![1, 0]],
+        //     vec![coord![0, 1], coord![1, 2]],
+        //     vec![coord![0, 1], coord![1, 1]],
+        //     vec![coord![0, 0], coord![2, 2]],
+        // ];
+        // for m in moves {
+        //     cell.update(&m, 0);
+        // }
+        // dbg!(
+        //     &cell
+        //         .children
+        //         .get(&coord![0, 0])
+        //         .unwrap()
+        //         .children
+        //         .get(&coord![2, 2])
+        // );
+        // dbg!(&cell.state);
+        App {
+            game: Game::new(2, 3, 3),
+            depth: 3,
+            newboard_in_a_row: 3,
+            newboard_layer: 3,
+            newboard_rank: 3,
+            curr_logfile_path: String::new(),
+        }
+    }
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         CentralPanel::default().show(ctx, |ui| {
             let screen_size = ui.available_rect_before_wrap();
+            let rect_size = Vec2::splat(screen_size.size().y);
+            let display_rect = Rect::from_center_size(screen_size.center(), rect_size);
+            let resp = ui.interact(display_rect, Id::new(10), Sense::all());
             ui.label("In a Row");
             ui.add(Slider::new(&mut self.newboard_in_a_row, 2..=15));
             ui.label("Layer");
             ui.add(Slider::new(&mut self.newboard_layer, 2..=15));
             ui.label("Rank");
-            ui.add(Slider::new(&mut self.newboard_rank, 2..=12));
+            ui.add(Slider::new(&mut self.newboard_rank, 1..=12));
             if ui.button("Generate New Board").clicked() {
-                self.board = Board::new(
+                self.game.board = Board::new(
                     self.newboard_rank,
                     self.newboard_layer,
                     self.newboard_in_a_row,
                 );
-                self.curr_team = 0;
-                self.correct_box = 0;
-                self.curr_ind = 0;
+                self.game.curr_team = 0;
+                self.game.correct_box = 0;
+                self.game.curr_ind = 0;
                 self.depth = self.newboard_rank.min(5);
-                self.prev_moves = vec![];
+                self.game.prev_moves = vec![];
             }
             ui.label("Rendering Depth");
-            ui.add(Slider::new(&mut self.depth, 1..=self.board.rank));
+            ui.add(Slider::new(&mut self.depth, 1..=self.game.board.rank));
             ui.label("Log File Path");
             ui.text_edit_singleline(&mut self.curr_logfile_path);
             if ui.button("Read from file").clicked()
                 && let Some(new) =
-                    App::from_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")))
+                    Game::from_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")))
             {
-                *self = new;
+                self.game = new;
             }
             if ui.button("Write to file").clicked() {
-                self.write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
+                self.game
+                    .write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
             }
 
-            let rect_size = Vec2::splat(screen_size.size().y);
-            let display_rect = Rect::from_center_size(screen_size.center(), rect_size);
-            self.board.render(
+            self.game.board.render(
                 ui,
                 display_rect,
-                self.curr_ind,
+                self.game.curr_ind,
                 self.depth,
-                &self.teams,
+                &self.game.teams,
                 10.0,
-                self.correct_box,
+                self.game.correct_box,
             );
-            self.input(ui);
-            let resp = ui.interact(ui.available_rect_before_wrap(), Id::new(10), Sense::all());
-            self.mouse_input(&resp, display_rect);
+            self.game.input(ui);
+            self.game.mouse_input(&resp, display_rect);
         });
     }
 }

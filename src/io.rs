@@ -1,9 +1,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::{fs, path::Path};
 
-use crate::{app::App, board::Board, team::default_teams};
+use crate::{app::Game, board::Board, team::default_teams};
 
-impl App {
+impl Game {
     fn to_logfile_string(&self) -> String {
         let mut str = String::new();
         for val in [
@@ -40,12 +40,7 @@ impl App {
             curr_ind: 0,
             curr_team: (*vals.get(3)?)? as u8,
             prev_moves: Vec::with_capacity(vals.len()),
-            depth: (*vals.get(1)?)?.min(5) as u8,
-            newboard_rank: 3,
-            newboard_layer: 3,
-            newboard_in_a_row: 3,
             correct_box: 0,
-            curr_logfile_path: String::new(),
         };
         for ind in 4..vals.len() {
             let mov = vals[ind]?;
