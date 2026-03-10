@@ -22,6 +22,7 @@ const KEYBINDS: [(Key, usize); 9] = [
 
 const BACK_KEY: Key = Key::Backspace;
 const UNDO_KEY: Key = Key::Z;
+const CORRECT_BOX_KEY: Key = Key::Enter;
 
 pub struct App {
     pub board: Board,
@@ -113,6 +114,8 @@ impl App {
                         } else {
                             0
                         }
+                    } else if input.key_pressed(CORRECT_BOX_KEY) {
+                        self.curr_ind = self.correct_box;
                     }
                 }
             })
