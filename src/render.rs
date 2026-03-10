@@ -1,5 +1,5 @@
 use crate::{board::Board, team::Team};
-use egui::{Color32, Rect, Ui, vec2};
+use egui::{Color32, Rect, Ui, Vec2, vec2};
 
 const DEFAULT_COLOR: Color32 = Color32::GRAY;
 
@@ -28,11 +28,16 @@ impl Board {
                 && depth > 0
             {
                 for i in 0..self.grid_num() {
-                    let new_size = rect.size() / self.layer as f32;
+                    let new_size =
+                        (rect.size() - Vec2::splat(stroke_size * (2.0))) / self.layer as f32;
                     let coord = self.rel_index_to_coord(i);
-                    let min =
-                        rect.min + vec2(coord.x as f32 * new_size.x, coord.y as f32 * new_size.y);
-                    let new_rect = Rect::from_min_size(min, new_size).shrink(stroke_size / 2.0);
+                    let min = rect.min
+                        + vec2(
+                            stroke_size + new_size.x * coord.x as f32,
+                            stroke_size + new_size.y * coord.y as f32,
+                        );
+                    let new_rect = Rect::from_min_size(min, new_size);
+                    // let new_rect = rect.shrink(amnt)
                     self.render(
                         ui,
                         new_rect,
