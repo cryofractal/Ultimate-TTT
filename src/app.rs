@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use egui::{CentralPanel, Id, Key, Rect, Response, Sense, Slider, Ui, Vec2};
+use egui::*;
 
 use crate::{
     board::Board,
@@ -162,39 +162,54 @@ impl eframe::App for App {
             let rect_size = Vec2::splat(screen_size.size().y);
             let display_rect = Rect::from_center_size(screen_size.center(), rect_size);
             let resp = ui.interact(display_rect, Id::new(10), Sense::all());
-            ui.label("In a Row");
-            ui.add(Slider::new(&mut self.newboard_in_a_row, 2..=15));
-            ui.label("Layer");
-            ui.add(Slider::new(&mut self.newboard_layer, 2..=15));
-            ui.label("Rank");
-            ui.add(Slider::new(&mut self.newboard_rank, 1..=12));
-            if ui.button("Generate New Board").clicked() {
-                self.game.board = Board::new(
-                    self.newboard_rank,
-                    self.newboard_layer,
-                    self.newboard_in_a_row,
-                );
-                self.game.curr_team = 0;
-                self.game.correct_box = 0;
-                self.game.curr_ind = 0;
-                self.depth = self.newboard_rank.min(5);
-                self.game.prev_moves = vec![];
-            }
-            ui.label("Rendering Depth");
-            ui.add(Slider::new(&mut self.depth, 1..=self.game.board.rank));
-            ui.label("Log File Path");
-            ui.text_edit_singleline(&mut self.curr_logfile_path);
-            if ui.button("Read from file").clicked()
-                && let Some(new) =
-                    Game::from_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")))
-            {
-                self.game = new;
-            }
-            if ui.button("Write to file").clicked() {
-                self.game
-                    .write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
-            }
-
+            egui::MenuBar::new().ui(ui, |ui| {
+                // File Menu
+                let file_button = default_menu_button("File");
+                file_button.ui(ui, |ui| {
+                    ui.label("Log File Path");
+                    ui.text_edit_singleline(&mut self.curr_logfile_path);
+                    if ui.button("Read from file").clicked()
+                        && let Some(new) = Game::from_file(&PathBuf::from(
+                            &(self.curr_logfile_path.clone() + ".txt"),
+                        ))
+                    {
+                        self.game = new;
+                    }
+                    if ui.button("Write to file").clicked() {
+                        self.game.write_to_file(&PathBuf::from(
+                            &(self.curr_logfile_path.clone() + ".txt"),
+                        ));
+                    }
+                });
+                //Game Menu
+                let game_button = default_menu_button("Game");
+                game_button.ui(ui, |ui| {
+                    ui.label("In a Row");
+                    ui.add(Slider::new(&mut self.newboard_in_a_row, 2..=15));
+                    ui.label("Layer");
+                    ui.add(Slider::new(&mut self.newboard_layer, 2..=15));
+                    ui.label("Rank");
+                    ui.add(Slider::new(&mut self.newboard_rank, 1..=12));
+                    if ui.button("Generate New Board").clicked() {
+                        self.game.board = Board::new(
+                            self.newboard_rank,
+                            self.newboard_layer,
+                            self.newboard_in_a_row,
+                        );
+                        self.game.curr_team = 0;
+                        self.game.correct_box = 0;
+                        self.game.curr_ind = 0;
+                        self.depth = self.newboard_rank.min(5);
+                        self.game.prev_moves = vec![];
+                    }
+                });
+                //View Menu
+                let view_button = default_menu_button("View");
+                view_button.ui(ui, |ui| {
+                    ui.label("Rendering Depth");
+                    ui.add(Slider::new(&mut self.depth, 1..=self.game.board.rank));
+                });
+            });
             self.game.board.render(
                 ui,
                 display_rect,
@@ -208,4 +223,10 @@ impl eframe::App for App {
             self.game.mouse_input(&resp, display_rect);
         });
     }
+}
+
+fn default_menu_button<'a>(text: &'a str) -> egui::containers::menu::MenuButton<'a> {
+    let button = egui::containers::menu::MenuButton::new(text);
+    let config = egui::containers::menu::MenuConfig::new();
+    button.config(config.close_behavior(PopupCloseBehavior::CloseOnClickOutside))
 }

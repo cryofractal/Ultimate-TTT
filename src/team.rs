@@ -12,12 +12,12 @@ pub fn default_teams() -> Vec<Team> {
         Team {
             name: "X".to_string(),
             id: 0,
-            color: Color32::RED,
+            color: Color32::from_rgb(255, 128, 0),
         },
         Team {
             name: "O".to_string(),
             id: 1,
-            color: Color32::BLUE,
+            color: Color32::from_rgb(0, 128, 255),
         },
     ]
 }
