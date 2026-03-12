@@ -46,6 +46,8 @@ impl App {
             newboard_in_a_row: 3,
             correct_box: 0,
             curr_logfile_path: String::new(),
+            stream: None,
+            my_team_id: 0,
         };
         for ind in 4..vals.len() {
             let mov = vals[ind]?;
