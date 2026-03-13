@@ -76,7 +76,6 @@ pub enum Command {
 
 impl Command {
     pub fn from_byte(byte: u8, val: usize) -> Option<Self> {
-        dbg!(byte);
         Some(match byte {
             0 => Self::Check(val),
             1 => Self::ReadMove(val),
@@ -116,7 +115,7 @@ impl State {
                 game: self.games[game_id].clone(),
                 team_id: u8::from_le(buf[0]),
             };
-            thread::spawn(move || while dbg!(!conn.update()) {});
+            thread::spawn(move || while !conn.update() {});
         }
         // } else {
         //     for connection in &mut self.connections {

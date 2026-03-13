@@ -1,7 +1,6 @@
 use std::{
     io::{Read, Write},
-    net::{TcpListener, TcpStream},
-    path::PathBuf,
+    net::TcpStream,
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
@@ -9,12 +8,7 @@ use std::{
 
 use egui::*;
 
-use crate::{
-    PASSWORD,
-    board::Board,
-    game::Game,
-    team::{Team, default_teams},
-};
+use crate::{PASSWORD, board::Board, game::Game, team::default_teams};
 
 const KEYBINDS_3: [(Key, usize); 9] = [
     (Key::R, 0),
@@ -141,12 +135,7 @@ impl App {
             && let Some(base) = self.game.board.children_base(self.curr_ind)
         {
             if self.game.board.is_leaf(base + ind) {
-                if self.game.board.state_array[base + ind] == 255
-                    && self
-                        .game
-                        .board
-                        .has_ancestor(base + ind, self.game.correct_box)
-                {
+                if self.game.board.state_array[base + ind] == 255 {
                     self.attempt_move_at(base + ind);
                 }
             } else {
@@ -156,9 +145,12 @@ impl App {
     }
     pub fn attempt_move_at(&mut self, ind: usize) {
         self.catch_up();
-        self.do_move(ind);
-        self.game.move_at(ind);
-        *self.num_moves.lock().unwrap() += 1;
+        if self.game.board.has_ancestor(ind, self.game.correct_box) {
+            self.do_move(ind);
+            self.game.move_at(ind);
+            *self.num_moves.lock().unwrap() += 1;
+            self.curr_ind = 0;
+        }
     }
     pub fn mouse_input(&mut self, resp: &Response, rect: Rect) {
         if resp.clicked_by(egui::PointerButton::Primary)
@@ -178,37 +170,6 @@ impl App {
             self.curr_ind = p;
         }
     }
-    // pub fn check_connection(&mut self) -> bool {
-    //     let mut buf = [0; 8];
-    //     if self.game.curr_team != self.my_team_id
-    //         && let Some(ref mut stream) = self.stream
-    //         && let Ok(x) = stream.read(&mut buf)
-    //         && x > 0
-    //     {
-    //         let ind = usize::from_le_bytes(buf);
-    //         dbg!(ind);
-    //         self.game.move_at(ind);
-    //         true
-    //     } else {
-    //         false
-    //     }
-    // }
-    // pub fn write_to_connection(&mut self, ind: usize) -> bool {
-    //     let bytes = ind.to_le_bytes();
-    //     let mut buf = [0; 9];
-    //     buf[0] = 2;
-    //     for i in 0..8 {
-    //         buf[i + 1] = bytes[i]
-    //     }
-    //     if let Some(ref mut stream) = self.stream
-    //         && let Ok(x) = stream..lock()write(&buf)
-    //         && x > 0
-    //     {
-    //         true
-    //     } else {
-    //         false
-    //     }
-    // }
     pub fn setup_connection_client(&mut self, game_id: usize) {
         let mut stream = TcpStream::connect(ADDR).unwrap();
         let mut v = Vec::new();
@@ -252,7 +213,7 @@ impl App {
                 u8::from_le(header[0]),
                 u8::from_le(header[2]),
             );
-            self.game.board = board;
+            self.game = Game::new(board, default_teams(), 0, vec![], 0);
             let mut length_buffer = [0; 8];
             let mut move_buffer = [0; 8];
             while stream.read(&mut length_buffer).unwrap() == 0 {}
@@ -283,7 +244,6 @@ impl App {
             v.extend_from_slice(&self.game.prev_moves.len().to_le_bytes());
             stream.write(v.as_slice()).unwrap();
             while stream.read(&mut team_id_buf).unwrap() == 0 {}
-            self.game.curr_team = u8::from_le(buf[0]);
             while stream.read(&mut buf).unwrap() == 0 {}
             let len = usize::from_le_bytes(buf.clone());
             *self.num_moves.lock().unwrap() += len;
@@ -292,6 +252,7 @@ impl App {
                 let mov = usize::from_le_bytes(buf.clone());
                 self.game.move_at(mov);
             }
+            self.game.curr_team = u8::from_le(team_id_buf[0]);
         } else {
             todo!()
         }

@@ -31,7 +31,6 @@ impl Game {
     pub fn default_game() -> Self {
         Game::new(Board::new(2, 3, 3), default_teams(), 0, vec![], 0)
     }
-    //returns if a move happened
     pub fn move_at(&mut self, ind: usize) {
         self.board.move_at_index(ind, self.curr_team);
         self.correct_box = self.board.get_next_correct_move_box(ind).unwrap();
