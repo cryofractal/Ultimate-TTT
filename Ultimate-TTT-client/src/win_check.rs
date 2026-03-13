@@ -28,21 +28,19 @@ fn count_in_dir(
     in_a_row: i16,
     team_id: u8,
 ) -> u8 {
-    dbg!(base);
     let mut longest = 0;
     let mut curr = 0;
     for i in (-in_a_row + 1)..in_a_row {
         let offset = offset(base, dir, i);
         if in_bounds(offset, layer) {
             let ind = index(offset, layer);
-            dbg!(ind);
             curr = if tiles[ind] == team_id { curr + 1 } else { 0 };
             if curr > longest {
                 longest = curr;
             }
         }
     }
-    dbg!(longest)
+    longest
 }
 
 fn offset(base: Coord, dir: (i16, i16), mag: i16) -> (i16, i16) {

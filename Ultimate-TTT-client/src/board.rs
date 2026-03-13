@@ -112,7 +112,7 @@ impl Board {
                     if self.is_solved(
                         self.children(index).unwrap(),
                         id,
-                        dbg!(self.rel_index_to_coord(rel_position)),
+                        self.rel_index_to_coord(rel_position),
                     ) {
                         self.state_array[index] = id;
                         true
