@@ -5,6 +5,7 @@ pub mod render;
 pub mod team;
 pub mod test;
 pub mod win_check;
+pub mod game;
 
 use crate::app::*;
 
