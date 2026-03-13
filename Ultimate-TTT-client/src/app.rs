@@ -2,8 +2,6 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
-    thread::sleep,
-    time::Duration,
 };
 
 use egui::{CentralPanel, Id, Key, Rect, Response, Sense, Slider, Ui, Vec2};
