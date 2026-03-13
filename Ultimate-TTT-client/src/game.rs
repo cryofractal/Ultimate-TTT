@@ -1,4 +1,7 @@
-use crate::*;
+use crate::{
+    board::Board,
+    team::{Team, default_teams},
+};
 
 pub struct Game {
     pub board: Board,
@@ -34,9 +37,5 @@ impl Game {
         self.correct_box = self.board.get_next_correct_move_box(ind).unwrap();
         self.prev_moves.push(ind);
         self.curr_team = (self.curr_team + 1) % self.teams.len() as u8;
-        self.curr_ind = 0;
-        if direct {
-            self.write_to_connection(ind);
-        }
     }
 }

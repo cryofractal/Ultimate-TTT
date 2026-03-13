@@ -2,11 +2,15 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
+    sync::{Arc, Mutex},
+    thread::{self, sleep},
+    time::Duration,
 };
 
 use egui::*;
 
 use crate::{
+    PASSWORD,
     board::Board,
     game::Game,
     team::{Team, default_teams},
@@ -30,17 +34,25 @@ const BACK_KEY: Key = Key::Backspace;
 const UNDO_KEY: Key = Key::Z;
 
 const ADDR: &str = "127.0.0.1:52525";
+const CHECK: u8 = 0_u8.to_le();
+const READ: u8 = 1_u8.to_le();
+const MOVE: u8 = 2_u8.to_le();
+const TERMINATE: u8 = 3_u8.to_le();
 
 pub struct App {
     pub game: Game,
+    pub num_moves: Arc<Mutex<usize>>,
     pub curr_ind: usize,
     pub depth: u8,
     pub newboard_rank: u8,
     pub newboard_layer: u8,
     pub newboard_in_a_row: u8,
     pub curr_logfile_path: String,
-    pub stream: Option<TcpStream>,
+    pub stream: Option<Arc<Mutex<TcpStream>>>,
     pub my_team_id: u8,
+    pub check_thread_kill: Arc<Mutex<bool>>,
+    pub check_thread_check: Arc<Mutex<bool>>,
+    val: usize,
 }
 
 impl App {
@@ -66,6 +78,7 @@ impl App {
         // dbg!(&cell.state);
         App {
             game: Game::default_game(),
+            num_moves: Arc::new(Mutex::new(0)),
             curr_ind: 0,
             depth: 3,
             newboard_in_a_row: 3,
@@ -74,9 +87,12 @@ impl App {
             curr_logfile_path: String::new(),
             stream: None,
             my_team_id: 0,
+            val: 0,
+            check_thread_kill: Arc::new(Mutex::new(false)),
+            check_thread_check: Arc::new(Mutex::new(true)),
         }
     }
-    pub fn input(&mut self, ui: &Ui) -> bool {
+    pub fn input(&mut self, ui: &Ui) {
         if ui.ctx().memory(|x| x.focused().is_none()) {
             ui.input(|input| {
                 if input.focused {
@@ -84,14 +100,14 @@ impl App {
                         3 => {
                             for (key, ind) in KEYBINDS_3 {
                                 if input.key_pressed(key) {
-                                    return self.game.proc_input_at(ind);
+                                    return self.proc_input_at(ind);
                                 }
                             }
                         }
                         2 => {
                             for (key, ind) in KEYBINDS_2 {
                                 if input.key_pressed(key) {
-                                    return self.game.proc_input_at(ind);
+                                    return self.proc_input_at(ind);
                                 }
                             }
                         }
@@ -117,34 +133,34 @@ impl App {
                         }
                     }
                 }
-                return false;
             })
-        } else {
-            false
         }
     }
-    pub fn proc_input_at(&mut self, ind: usize) -> bool {
+    pub fn proc_input_at(&mut self, ind: usize) {
         if self.game.board.state_array[self.curr_ind] == 255
             && let Some(base) = self.game.board.children_base(self.curr_ind)
         {
             if self.game.board.is_leaf(base + ind) {
                 if self.game.board.state_array[base + ind] == 255
-                    && self.game.board.has_ancestor(base + ind, self.game.correct_box)
+                    && self
+                        .game
+                        .board
+                        .has_ancestor(base + ind, self.game.correct_box)
                 {
-                    self.game.move_at(base + ind);
-                    true
-                } else {
-                    false
+                    self.attempt_move_at(base + ind);
                 }
             } else {
                 self.curr_ind = base + ind;
-                false
             }
-        } else {
-            false
         }
     }
-    pub fn mouse_input(&mut self, resp: &Response, rect: Rect) -> bool {
+    pub fn attempt_move_at(&mut self, ind: usize) {
+        self.catch_up();
+        self.do_move(ind);
+        self.game.move_at(ind);
+        *self.num_moves.lock().unwrap() += 1;
+    }
+    pub fn mouse_input(&mut self, resp: &Response, rect: Rect) {
         if resp.clicked_by(egui::PointerButton::Primary)
             && let Some(hpos) = resp.hover_pos()
             && rect.contains(hpos)
@@ -154,62 +170,84 @@ impl App {
             let (x, y) = (coords.x / square_size.x, coords.y / square_size.y);
             let (xint, yint) = (x as usize, y as usize);
             if !(xint >= self.game.board.layer as usize || yint >= self.game.board.layer as usize) {
-                self.game
-                    .proc_input_at((self.game.board.layer as usize * yint) + xint)
-            } else {
-                false
+                self.proc_input_at((self.game.board.layer as usize * yint) + xint)
             }
         } else if resp.clicked_by(egui::PointerButton::Secondary)
             && let Some(p) = self.game.board.parent(self.curr_ind)
         {
             self.curr_ind = p;
-            false
-        } else {
-            false
         }
     }
-    pub fn check_connection(&mut self) -> bool {
-        let mut buf = [0; 8];
-        if self.game.curr_team != self.my_team_id
-            && let Some(ref mut stream) = self.stream
-            && let Ok(x) = stream.read(&mut buf)
-            && x > 0
-        {
-            let ind = usize::from_le_bytes(buf);
-            dbg!(ind);
-            self.game.move_at(ind);
-            true
-        } else {
-            false
-        }
-    }
-    pub fn write_to_connection(&mut self, ind: usize) -> bool {
-        let bytes = ind.to_le_bytes();
-        let mut buf = [0; 9];
-        buf[0] = 2;
-        for i in 0..8 {
-            buf[i + 1] = bytes[i]
-        }
-        if let Some(ref mut stream) = self.stream
-            && let Ok(x) = stream.write(&buf)
-            && x > 0
-        {
-            true
-        } else {
-            false
-        }
-    }
+    // pub fn check_connection(&mut self) -> bool {
+    //     let mut buf = [0; 8];
+    //     if self.game.curr_team != self.my_team_id
+    //         && let Some(ref mut stream) = self.stream
+    //         && let Ok(x) = stream.read(&mut buf)
+    //         && x > 0
+    //     {
+    //         let ind = usize::from_le_bytes(buf);
+    //         dbg!(ind);
+    //         self.game.move_at(ind);
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }
+    // pub fn write_to_connection(&mut self, ind: usize) -> bool {
+    //     let bytes = ind.to_le_bytes();
+    //     let mut buf = [0; 9];
+    //     buf[0] = 2;
+    //     for i in 0..8 {
+    //         buf[i + 1] = bytes[i]
+    //     }
+    //     if let Some(ref mut stream) = self.stream
+    //         && let Ok(x) = stream..lock()write(&buf)
+    //         && x > 0
+    //     {
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }
     pub fn setup_connection_client(&mut self, game_id: usize) {
-        let stream = TcpStream::connect(ADDR).unwrap();
-        self.stream = Some(stream);
-        self.my_team_id = 1;
+        let mut stream = TcpStream::connect(ADDR).unwrap();
+        let mut v = Vec::new();
+        v.extend_from_slice(&PASSWORD.to_le_bytes());
+        v.extend_from_slice(&game_id.to_le_bytes());
+        stream.write(v.as_slice()).unwrap();
+        self.stream = Some(Arc::new(Mutex::new(stream)));
+        self.get_game_data();
+        self.restart_check_thread();
         println!("Client connected!");
     }
+    pub fn restart_check_thread(&mut self) {
+        *self.check_thread_kill.lock().unwrap() = true;
+        self.check_thread_kill = Arc::new(Mutex::new(false));
+        let check_check = self.check_thread_check.clone();
+        let second_stream = self.stream.as_ref().unwrap().clone();
+        let check_kill = self.check_thread_kill.clone();
+        let num_moves2 = self.num_moves.clone();
+        thread::spawn(move || {
+            loop {
+                if *check_kill.lock().unwrap() == true {
+                    break;
+                } else {
+                    let val = check(
+                        &mut second_stream.lock().unwrap(),
+                        *num_moves2.lock().unwrap(),
+                    );
+                    *check_check.lock().unwrap() = val;
+                }
+                sleep(Duration::from_millis(100));
+            }
+        });
+    }
     pub fn get_game_data(&mut self) {
-        if let Some(ref mut stream) = self.stream {
+        if let Some(ref str) = self.stream {
+            let mut stream = str.lock().unwrap();
             let mut header = [0; 4];
             while stream.read(&mut header).unwrap() == 0 {}
-            let mut board = Board::new(
+            let board = Board::new(
                 u8::from_le(header[1]),
                 u8::from_le(header[0]),
                 u8::from_le(header[2]),
@@ -219,7 +257,8 @@ impl App {
             let mut move_buffer = [0; 8];
             while stream.read(&mut length_buffer).unwrap() == 0 {}
             let len = usize::from_le_bytes(length_buffer);
-            for i in 0..len {
+            *self.num_moves.lock().unwrap() = len;
+            for _ in 0..len {
                 while stream.read(&mut move_buffer).unwrap() == 0 {}
                 let mov = usize::from_le_bytes(move_buffer.clone());
                 self.game.move_at(mov);
@@ -227,12 +266,75 @@ impl App {
             self.game.curr_team = u8::from_le(header[3]);
         }
     }
-    pub fn check(&mut self) -> bool {}
-    pub fn read_moves(&mut self) {}
-    pub fn do_move(&mut self, mov: usize) {}
-    pub fn terminate(&mut self) {}
+    pub fn check(&mut self) -> bool {
+        if let Some(ref str) = self.stream {
+            check(&mut str.lock().unwrap(), *self.num_moves.lock().unwrap())
+        } else {
+            todo!()
+        }
+    }
+    pub fn read_moves(&mut self) {
+        if let Some(ref mut str) = self.stream {
+            let mut stream = str.lock().unwrap();
+            let mut team_id_buf = [0; 1];
+            let mut buf = [0; 8];
+            let mut v = Vec::new();
+            v.push(READ);
+            v.extend_from_slice(&self.game.prev_moves.len().to_le_bytes());
+            stream.write(v.as_slice()).unwrap();
+            while stream.read(&mut team_id_buf).unwrap() == 0 {}
+            self.game.curr_team = u8::from_le(buf[0]);
+            while stream.read(&mut buf).unwrap() == 0 {}
+            let len = usize::from_le_bytes(buf.clone());
+            *self.num_moves.lock().unwrap() += len;
+            for _ in 0..len {
+                while stream.read(&mut buf).unwrap() == 0 {}
+                let mov = usize::from_le_bytes(buf.clone());
+                self.game.move_at(mov);
+            }
+        } else {
+            todo!()
+        }
+    }
+    pub fn do_move(&mut self, mov: usize) {
+        if let Some(ref str) = self.stream {
+            let mut stream = str.lock().unwrap();
+            let mut v = Vec::new();
+            v.push(MOVE);
+            v.extend_from_slice(&mov.to_le_bytes());
+            stream.write(v.as_slice()).unwrap();
+        }
+    }
+    pub fn terminate(&mut self) {
+        if let Some(ref str) = self.stream {
+            let mut stream = str.lock().unwrap();
+            let mut v = Vec::new();
+            v.push(TERMINATE);
+            v.extend_from_slice(&0_usize.to_le_bytes());
+            stream.write(v.as_slice()).unwrap();
+        }
+    }
+    pub fn catch_up(&mut self) {
+        let check_mutex = self.check_thread_check.lock().unwrap();
+        let check = *check_mutex;
+        drop(check_mutex);
+        if !check {
+            self.read_moves();
+            *self.check_thread_check.lock().unwrap() = true;
+        }
+    }
 }
 
+pub fn check(stream: &mut TcpStream, len: usize) -> bool {
+    let mut buf = [0; 1];
+    let mut v = Vec::new();
+    v.push(CHECK);
+    v.extend_from_slice(&len.to_le_bytes());
+    stream.write(v.as_slice()).unwrap();
+    while stream.read(&mut buf).unwrap() == 0 {}
+    let val = u8::from_le(buf[0]);
+    if val == 0 { false } else { true }
+}
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         CentralPanel::default().show(ctx, |ui| {
@@ -255,23 +357,23 @@ impl eframe::App for App {
                 self.curr_ind = 0;
                 self.depth = self.newboard_rank.min(5);
             }
+            self.catch_up();
             ui.label("Rendering Depth");
             ui.add(Slider::new(&mut self.depth, 1..=self.game.board.rank));
             ui.label("Log File Path");
             ui.text_edit_singleline(&mut self.curr_logfile_path);
-            if ui.button("Read from file").clicked()
-                && let Some(new) =
-                    App::from_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")))
-            {
-                *self = new;
-            }
-            if ui.button("Write to file").clicked() {
-                self.write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
-            }
+            // if ui.button("Read from file").clicked()
+            //     && let Some(new) =
+            //         App::from_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")))
+            // {
+            //     *self = new;
+            // }
+            // if ui.button("Write to file").clicked() {
+            //     self.write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
+            // }
             if ui.button("Connect to server").clicked() {
-                self.setup_connection_client();
+                self.setup_connection_client(0);
             }
-
             let rect_size = Vec2::splat(screen_size.size().y);
             let display_rect = Rect::from_center_size(screen_size.center(), rect_size);
             self.game.board.render(
@@ -283,15 +385,23 @@ impl eframe::App for App {
                 10.0,
                 self.game.correct_box,
             );
-            let resp = ui.interact(ui.available_rect_before_wrap(), Id::new(10), Sense::all());
-            let mut _early_ret = false;
-            if self.input(ui) {
-                _early_ret = true;
+            let resp = ui.interact(display_rect, Id::new(10), Sense::all());
+            self.input(ui);
+            self.mouse_input(&resp, display_rect);
+            if ui.button("CHECK").clicked() {
+                dbg!(self.check());
             }
-            if self.mouse_input(&resp, display_rect) {
-                _early_ret = true;
+            if ui.button("READ").clicked() {
+                self.read_moves();
             }
-            self.check_connection();
+            if ui.button("MOVE").clicked() {
+                self.do_move(self.val);
+            }
+            if ui.button("TERMINATE").clicked() {
+                self.terminate();
+            }
+            ui.add(Slider::new(&mut self.val, 0..=100));
+            //self.check_connection();
         });
     }
 }

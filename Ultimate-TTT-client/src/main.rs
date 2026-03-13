@@ -1,13 +1,15 @@
 pub mod app;
 pub mod board;
-pub mod io;
+pub mod game;
+//pub mod io;
 pub mod render;
 pub mod team;
 pub mod test;
 pub mod win_check;
-pub mod game;
 
 use crate::app::*;
+
+pub const PASSWORD: usize = 182309128390812;
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]

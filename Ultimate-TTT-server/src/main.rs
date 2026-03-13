@@ -29,22 +29,28 @@ impl Game {
             self.curr_team.to_le(),
         ];
         let len = self.moves.len().to_le_bytes();
-        stream.write(&header).unwrap();
-        stream.write(&len).unwrap();
+        let mut v = Vec::new();
+        v.extend_from_slice(&header);
+        v.extend_from_slice(&len);
         for mov in &self.moves {
-            stream.write(&mov.to_le_bytes()).unwrap();
+            v.extend_from_slice(&mov.to_le_bytes());
         }
+        stream.write(v.as_slice()).unwrap();
     }
+    //also writes the current team id
     pub fn write_moves_from(&self, start: usize, stream: &mut TcpStream) {
         let diff = if start > self.moves.len() {
             0
         } else {
             self.moves.len() - start
         };
-        stream.write(&diff.to_le_bytes()).unwrap();
+        let mut v = Vec::new();
+        v.push(self.curr_team.to_le());
+        v.extend_from_slice(&diff.to_le_bytes());
         for mov in &self.moves[start..self.moves.len()] {
-            stream.write(&mov.to_le_bytes()).unwrap();
+            v.extend_from_slice(&mov.to_le_bytes());
         }
+        stream.write(v.as_slice()).unwrap();
     }
     pub fn new_test() -> Self {
         Self {
@@ -70,7 +76,8 @@ pub enum Command {
 
 impl Command {
     pub fn from_byte(byte: u8, val: usize) -> Option<Self> {
-        Some(match u8::from_le(byte) {
+        dbg!(byte);
+        Some(match byte {
             0 => Self::Check(val),
             1 => Self::ReadMove(val),
             2 => Self::DoMove(val),
@@ -109,7 +116,7 @@ impl State {
                 game: self.games[game_id].clone(),
                 team_id: u8::from_le(buf[0]),
             };
-            thread::spawn(move || while !conn.update() {});
+            thread::spawn(move || while dbg!(!conn.update()) {});
         }
         // } else {
         //     for connection in &mut self.connections {
@@ -172,4 +179,7 @@ fn main() {
     let mut state = State {
         games: vec![Arc::new(Mutex::new(Game::new_test()))],
     };
+    loop {
+        state.update();
+    }
 }
