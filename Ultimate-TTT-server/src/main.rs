@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-pub const ADDR: &str = "127.0.0.1:52525";
+pub const ADDR: &str = "100.67.217.200:52525";
 pub const PASSWORD: usize = 182309128390812;
 
 pub struct Game {

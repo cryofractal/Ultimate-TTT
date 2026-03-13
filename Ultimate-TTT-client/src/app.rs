@@ -46,6 +46,7 @@ pub struct App {
     pub my_team_id: u8,
     pub check_thread_kill: Arc<Mutex<bool>>,
     pub check_thread_check: Arc<Mutex<bool>>,
+    curr_ip: String,
     val: usize,
 }
 
@@ -84,6 +85,7 @@ impl App {
             val: 0,
             check_thread_kill: Arc::new(Mutex::new(false)),
             check_thread_check: Arc::new(Mutex::new(true)),
+            curr_ip: String::from(ADDR),
         }
     }
     pub fn input(&mut self, ui: &Ui) {
@@ -171,7 +173,7 @@ impl App {
         }
     }
     pub fn setup_connection_client(&mut self, game_id: usize) {
-        let mut stream = TcpStream::connect(ADDR).unwrap();
+        let mut stream = TcpStream::connect(&self.curr_ip).unwrap();
         let mut v = Vec::new();
         v.extend_from_slice(&PASSWORD.to_le_bytes());
         v.extend_from_slice(&game_id.to_le_bytes());
@@ -332,6 +334,7 @@ impl eframe::App for App {
             // if ui.button("Write to file").clicked() {
             //     self.write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
             // }
+            ui.add(TextEdit::singleline(&mut self.curr_ip));
             if ui.button("Connect to server").clicked() {
                 self.setup_connection_client(0);
             }
@@ -364,5 +367,6 @@ impl eframe::App for App {
             ui.add(Slider::new(&mut self.val, 0..=100));
             //self.check_connection();
         });
+        ctx.request_repaint();
     }
 }

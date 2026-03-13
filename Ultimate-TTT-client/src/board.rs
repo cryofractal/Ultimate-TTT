@@ -112,7 +112,7 @@ impl Board {
                     if self.is_solved(
                         self.children(index).unwrap(),
                         id,
-                        self.rel_index_to_coord(rel_position),
+                        dbg!(self.rel_index_to_coord(rel_position)),
                     ) {
                         self.state_array[index] = id;
                         true
@@ -127,7 +127,7 @@ impl Board {
     pub fn update_ascending(&mut self, start: usize, id: u8) {
         let mut curr = start;
         while let Some(next) = self.parent(curr)
-            && self.update_at(next, id, curr - (next * self.grid_num()))
+            && self.update_at(next, id, curr - (next * self.grid_num()) - 1)
         {
             curr = next;
         }
