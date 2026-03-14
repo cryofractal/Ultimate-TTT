@@ -56,7 +56,7 @@ impl Game {
         Self {
             moves: vec![],
             layers: 3,
-            rank: 2,
+            rank: 5,
             in_a_row: 3,
             curr_team: 0,
             num_teams: 2,

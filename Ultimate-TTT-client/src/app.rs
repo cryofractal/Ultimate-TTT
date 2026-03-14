@@ -46,6 +46,7 @@ pub struct App {
     pub my_team_id: u8,
     pub check_thread_kill: Arc<Mutex<bool>>,
     pub check_thread_check: Arc<Mutex<bool>>,
+    conn_game_id: usize,
     curr_ip: String,
     val: usize,
 }
@@ -78,7 +79,7 @@ impl App {
             depth: 3,
             newboard_in_a_row: 3,
             newboard_layer: 3,
-            newboard_rank: 3,
+            newboard_rank: 2,
             curr_logfile_path: String::new(),
             stream: None,
             my_team_id: 0,
@@ -86,6 +87,7 @@ impl App {
             check_thread_kill: Arc::new(Mutex::new(false)),
             check_thread_check: Arc::new(Mutex::new(true)),
             curr_ip: String::from(ADDR),
+            conn_game_id: 0,
         }
     }
     pub fn input(&mut self, ui: &Ui) {
@@ -147,7 +149,9 @@ impl App {
     }
     pub fn attempt_move_at(&mut self, ind: usize) {
         self.catch_up();
-        if self.game.board.has_ancestor(ind, self.game.correct_box) {
+        if self.game.board.has_ancestor(ind, self.game.correct_box)
+            && self.game.curr_team == self.my_team_id
+        {
             self.do_move(ind);
             self.game.move_at(ind);
             *self.num_moves.lock().unwrap() += 1;
@@ -334,11 +338,16 @@ impl eframe::App for App {
             // if ui.button("Write to file").clicked() {
             //     self.write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
             // }
+            ui.label("Team Number");
+            ui.add(Slider::new(&mut self.my_team_id, 0..=1));
+            ui.label("Server Address");
             ui.add(TextEdit::singleline(&mut self.curr_ip));
+            ui.label("Game ID");
+            ui.add(Slider::new(&mut self.conn_game_id, 0..=15));
             if ui.button("Connect to server").clicked() {
                 self.setup_connection_client(0);
             }
-            let rect_size = Vec2::splat(screen_size.size().y);
+            let rect_size = Vec2::splat(screen_size.size().y.min(screen_size.size().x));
             let display_rect = Rect::from_center_size(screen_size.center(), rect_size);
             self.game.board.render(
                 ui,
