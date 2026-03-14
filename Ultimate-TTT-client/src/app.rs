@@ -49,6 +49,7 @@ pub struct App {
     conn_game_id: usize,
     curr_ip: String,
     val: usize,
+    curr_err_msg: String,
 }
 
 impl App {
@@ -88,6 +89,7 @@ impl App {
             check_thread_check: Arc::new(Mutex::new(true)),
             curr_ip: String::from(ADDR),
             conn_game_id: 0,
+            curr_err_msg: String::new(),
         }
     }
     pub fn input(&mut self, ui: &Ui) {
@@ -176,8 +178,13 @@ impl App {
             self.curr_ind = p;
         }
     }
-    pub fn setup_connection_client(&mut self, game_id: usize) {
-        let mut stream = TcpStream::connect(&self.curr_ip).unwrap();
+    ///returns true if the connection was set up properly
+    pub fn setup_connection_client(&mut self, game_id: usize) -> bool {
+        let mut stream = if let Ok(x) = TcpStream::connect(&self.curr_ip) {
+            x
+        } else {
+            return false;
+        };
         let mut v = Vec::new();
         v.extend_from_slice(&PASSWORD.to_le_bytes());
         v.extend_from_slice(&game_id.to_le_bytes());
@@ -186,6 +193,7 @@ impl App {
         self.get_game_data();
         self.restart_check_thread();
         println!("Client connected!");
+        true
     }
     pub fn restart_check_thread(&mut self) {
         *self.check_thread_kill.lock().unwrap() = true;
@@ -345,7 +353,9 @@ impl eframe::App for App {
             ui.label("Game ID");
             ui.add(Slider::new(&mut self.conn_game_id, 0..=15));
             if ui.button("Connect to server").clicked() {
-                self.setup_connection_client(0);
+                if !self.setup_connection_client(0) {
+                    self.curr_err_msg = String::from("Server Connection Refused!");
+                }
             }
             let rect_size = Vec2::splat(screen_size.size().y.min(screen_size.size().x));
             let display_rect = Rect::from_center_size(screen_size.center(), rect_size);
@@ -374,6 +384,7 @@ impl eframe::App for App {
                 self.terminate();
             }
             ui.add(Slider::new(&mut self.val, 0..=100));
+            ui.label(&self.curr_err_msg);
             //self.check_connection();
         });
         ctx.request_repaint();

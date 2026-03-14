@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-pub const ADDR: &str = "100.67.217.200:52525";
+pub const ADDR: &str = "68.183.121.208:52525";
 pub const PASSWORD: usize = 182309128390812;
 
 pub struct Game {
@@ -56,7 +56,7 @@ impl Game {
         Self {
             moves: vec![],
             layers: 3,
-            rank: 5,
+            rank: 2,
             in_a_row: 3,
             curr_team: 0,
             num_teams: 2,
