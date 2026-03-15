@@ -3,8 +3,7 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
-    thread::{self, sleep},
-    time::Duration,
+    thread::{self},
 };
 //pub const ADDR: &str = "68.183.121.208:52525";
 pub const PASSWORD: usize = 182309128390812;
