@@ -7,7 +7,7 @@ pub struct Team {
     pub color: Color32,
 }
 
-pub fn default_teams() -> Vec<Team> {
+fn default_teams_full() -> Vec<Team> {
     vec![
         Team {
             name: "X".to_string(),
@@ -19,5 +19,19 @@ pub fn default_teams() -> Vec<Team> {
             id: 1,
             color: Color32::BLUE,
         },
+        Team {
+            name: "T".to_string(),
+            id: 2,
+            color: Color32::GREEN,
+        },
+        Team {
+            name: "U".to_string(),
+            id: 3,
+            color: Color32::YELLOW,
+        },
     ]
+}
+
+pub fn default_teams(num: u8) -> Vec<Team> {
+    Vec::from(&default_teams_full()[0..(num as usize)])
 }

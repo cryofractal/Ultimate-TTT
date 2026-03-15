@@ -6,6 +6,8 @@ use std::{
 };
 pub const ADDR: &str = "68.183.121.208:52525";
 pub const PASSWORD: usize = 182309128390812;
+pub const NEWGAME: u8 = 0_u8.to_le();
+pub const JOINGAME: u8 = 1_u8.to_le();
 
 pub struct Game {
     moves: Vec<usize>,
@@ -17,6 +19,16 @@ pub struct Game {
 }
 
 impl Game {
+    pub fn new(layer: u8, rank: u8, in_a_row: u8, num_teams: u8) -> Self {
+        Self {
+            moves: vec![],
+            layers: layer,
+            rank,
+            in_a_row,
+            curr_team: 0,
+            num_teams,
+        }
+    }
     pub fn move_at(&mut self, ind: usize) {
         self.moves.push(ind);
         self.curr_team = (self.curr_team + 1) % self.num_teams;
@@ -26,6 +38,7 @@ impl Game {
             self.layers.to_le(),
             self.rank.to_le(),
             self.in_a_row.to_le(),
+            self.num_teams.to_le(),
             self.curr_team.to_le(),
         ];
         let len = self.moves.len().to_le_bytes();
@@ -104,36 +117,43 @@ impl State {
     pub fn update(&mut self) {
         let listener = TcpListener::bind(ADDR).unwrap();
         let (mut stream, _addr) = listener.accept().unwrap();
-        let mut buf = [0; 16];
+        let mut buf = [0; 8];
         while stream.read(&mut buf).unwrap() == 0 {}
         let pass = usize::from_le_bytes(*buf[0..8].as_array().unwrap());
         if pass == PASSWORD {
-            let game_id = usize::from_le_bytes(*buf[8..].as_array().unwrap());
-            self.games[game_id].lock().unwrap().write_data(&mut stream);
-            let mut conn = Connection {
-                stream,
-                game: self.games[game_id].clone(),
-                team_id: u8::from_le(buf[0]),
-            };
-            thread::spawn(move || while !conn.update() {});
+            let mut commbuff = [0; 1];
+            while stream.read(&mut commbuff).unwrap() == 0 {}
+            let comm_byte = commbuff[0];
+            match comm_byte {
+                NEWGAME => {
+                    let mut header_buff = [0; 4];
+                    while stream.read(&mut header_buff).unwrap() == 0 {}
+                    let (layer, rank, in_a_row, num_teams) = (
+                        u8::from_le(header_buff[0]),
+                        u8::from_le(header_buff[1]),
+                        u8::from_le(header_buff[2]),
+                        u8::from_le(header_buff[3]),
+                    );
+                    self.games.push(Arc::new(Mutex::new(Game::new(
+                        layer, rank, in_a_row, num_teams,
+                    ))));
+                    let id = self.games.len() - 1;
+                    while stream.write(&id.to_le_bytes()).unwrap() == 0 {}
+                }
+                JOINGAME => {
+                    while stream.read(&mut buf).unwrap() == 0 {}
+                    let game_id = usize::from_le_bytes(buf);
+                    self.games[game_id].lock().unwrap().write_data(&mut stream);
+                    let mut conn = Connection {
+                        stream,
+                        game: self.games[game_id].clone(),
+                        team_id: u8::from_le(buf[0]),
+                    };
+                    thread::spawn(move || while !conn.update() {});
+                }
+                _ => {}
+            }
         }
-        // } else {
-        //     for connection in &mut self.connections {
-        //         let game = &mut self.games[connection.game_id];
-        //         let handle = thread::spawn(|| connection.update())
-        //         let comm = connection.update();
-        //         match comm {
-        //             Command::MakeNewGame(_) => todo!(),
-        //             Command::ConnectToExistingGame(_) => todo!(),
-        //             Command::DoMove(ind) => {
-        //                 let game = &mut self.games[connection.game_id];
-        //                 if game.curr_team == connection.team_id {
-        //                     game.move_at(ind);
-        //                 }
-        //             }
-        //         }
-        // }
-        //}
     }
 }
 
@@ -175,9 +195,7 @@ impl Connection {
 }
 
 fn main() {
-    let mut state = State {
-        games: vec![Arc::new(Mutex::new(Game::new_test()))],
-    };
+    let mut state = State::new();
     loop {
         state.update();
     }

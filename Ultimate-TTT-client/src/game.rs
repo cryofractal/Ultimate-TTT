@@ -29,7 +29,7 @@ impl Game {
     }
     //Generate Default Game
     pub fn default_game() -> Self {
-        Game::new(Board::new(2, 3, 3), default_teams(), 0, vec![], 0)
+        Game::new(Board::new(2, 3, 3), default_teams(2), 0, vec![], 0)
     }
     pub fn move_at(&mut self, ind: usize) {
         self.board.move_at_index(ind, self.curr_team);
