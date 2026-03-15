@@ -340,7 +340,7 @@ impl eframe::App for App {
             ui.label("Layer");
             ui.add(Slider::new(&mut self.newboard_layer, 2..=8));
             ui.label("Rank");
-            ui.add(Slider::new(&mut self.newboard_rank, 2..=5));
+            ui.add(Slider::new(&mut self.newboard_rank, 1..=5));
             ui.label("Number of Teams");
             ui.add(Slider::new(&mut self.newboard_numteams, 2..=4));
             // if ui.button("Generate New Board").clicked() {
