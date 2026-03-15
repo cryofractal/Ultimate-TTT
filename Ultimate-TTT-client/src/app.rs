@@ -319,7 +319,9 @@ pub fn check(stream: &mut TcpStream, len: usize) -> bool {
     let mut v = Vec::new();
     v.push(CHECK);
     v.extend_from_slice(&len.to_le_bytes());
-    stream.write(v.as_slice()).unwrap();
+    if let Err(_) = stream.write(v.as_slice()) {
+        return true;
+    };
     while if let Ok(x) = stream.read(&mut buf) {
         x == 0
     } else {
