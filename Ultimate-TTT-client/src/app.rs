@@ -206,6 +206,8 @@ impl App {
         while stream.read(&mut id_buf).unwrap() == 0 {}
         let gid = usize::from_le_bytes(id_buf);
         self.conn_game_id = gid;
+        let board = Board::new(rank, layers, in_a_row);
+        self.game = Game::new(board, default_teams(u8::from_le(num_teams)), 0, vec![], 0);
         self.stream = Some(Arc::new(Mutex::new(stream)));
         self.restart_check_thread();
     }
