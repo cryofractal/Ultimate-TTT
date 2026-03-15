@@ -23,6 +23,14 @@ impl Board {
                 (stroke_size, Color32::BLACK),
                 egui::StrokeKind::Inside,
             );
+        } else if curr_val == 254 {
+            ui.painter().rect(
+                rect,
+                0,
+                Color32::WHITE,
+                (stroke_size, Color32::BLACK),
+                egui::StrokeKind::Inside,
+            );
         } else {
             if let Some(children) = self.children_base(curr_ind)
                 && depth > 0

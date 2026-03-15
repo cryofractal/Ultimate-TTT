@@ -18,6 +18,9 @@ impl Board {
         }
         false
     }
+    pub fn is_tied(&self, tiles: &[u8]) -> bool {
+        tiles.iter().all(|x| *x < 255)
+    }
 }
 
 fn count_in_dir(

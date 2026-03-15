@@ -13,7 +13,8 @@ pub struct Board {
     pub layer: u8,
     // Current statuses of play for each cell
     // 255 - CONTESTED
-    // 255 > i - OWNED
+    // 254 - TIED
+    // 254 > i - OWNED
     pub state_array: Vec<u8>,
     // Previous path played (in order to undo)
     pub prev_path: Vec<Coord>,
@@ -115,6 +116,9 @@ impl Board {
                         self.rel_index_to_coord(rel_position),
                     ) {
                         self.state_array[index] = id;
+                        true
+                    } else if self.is_tied(self.children(index).unwrap()) {
+                        self.state_array[index] = 254;
                         true
                     } else {
                         false
