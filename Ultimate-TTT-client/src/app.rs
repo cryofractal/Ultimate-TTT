@@ -29,7 +29,7 @@ const KEYBINDS_3: [(Key, usize); 9] = [
 const KEYBINDS_2: [(Key, usize); 4] = [(Key::R, 0), (Key::T, 1), (Key::F, 2), (Key::G, 3)];
 
 const BACK_KEY: Key = Key::Backspace;
-const UNDO_KEY: Key = Key::Z;
+//const UNDO_KEY: Key = Key::Z;
 
 const ADDR: &str = "68.183.121.208:52525";
 const CHECK: u8 = 0_u8.to_le();
