@@ -5,10 +5,13 @@ use std::{
     sync::{Arc, Mutex},
     thread::{self},
 };
+pub const PORT: &str = ":52525";
 //pub const ADDR: &str = "68.183.121.208:52525";
 pub const PASSWORD: usize = 182309128390812;
 pub const NEWGAME: u8 = 0_u8.to_le();
 pub const JOINGAME: u8 = 1_u8.to_le();
+pub const NO_SUCH_GAME: u8 = 0_u8.to_le();
+pub const GAME_EXISTS: u8 = 1_u8.to_le();
 
 pub struct Game {
     moves: Vec<usize>,
@@ -34,7 +37,7 @@ impl Game {
         self.moves.push(ind);
         self.curr_team = (self.curr_team + 1) % self.num_teams;
     }
-    pub fn write_data(&self, stream: &mut TcpStream) {
+    pub fn write_data(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let header = [
             self.layers.to_le(),
             self.rank.to_le(),
@@ -44,12 +47,14 @@ impl Game {
         ];
         let len = self.moves.len().to_le_bytes();
         let mut v = Vec::new();
+        v.push(GAME_EXISTS);
         v.extend_from_slice(&header);
         v.extend_from_slice(&len);
         for mov in &self.moves {
             v.extend_from_slice(&mov.to_le_bytes());
         }
-        stream.write(v.as_slice()).unwrap();
+        stream.write(v.as_slice())?;
+        Ok(())
     }
     //also writes the current team id
     pub fn write_moves_from(&self, start: usize, stream: &mut TcpStream) {
@@ -115,20 +120,20 @@ impl State {
     pub fn new() -> Self {
         Self { games: vec![] }
     }
-    pub fn update(&mut self, ip: &str) {
+    pub fn update(&mut self, ip: &str) -> std::io::Result<()> {
         let listener = TcpListener::bind(ip).unwrap();
         let (mut stream, _addr) = listener.accept().unwrap();
         let mut buf = [0; 8];
-        while stream.read(&mut buf).unwrap() == 0 {}
+        while stream.read(&mut buf)? == 0 {}
         let pass = usize::from_le_bytes(*buf[0..8].as_array().unwrap());
         if pass == PASSWORD {
             let mut commbuff = [0; 1];
-            while stream.read(&mut commbuff).unwrap() == 0 {}
+            while stream.read(&mut commbuff)? == 0 {}
             let comm_byte = commbuff[0];
             match comm_byte {
                 NEWGAME => {
                     let mut header_buff = [0; 4];
-                    while stream.read(&mut header_buff).unwrap() == 0 {}
+                    while stream.read(&mut header_buff)? == 0 {}
                     let (layer, rank, in_a_row, num_teams) = (
                         u8::from_le(header_buff[0]),
                         u8::from_le(header_buff[1]),
@@ -139,52 +144,97 @@ impl State {
                         layer, rank, in_a_row, num_teams,
                     ))));
                     let id = self.games.len() - 1;
-                    while stream.write(&id.to_le_bytes()).unwrap() == 0 {}
+                    while stream.write(&id.to_le_bytes())? == 0 {}
                     let mut conn = Connection {
                         stream,
                         game: self.games[id].clone(),
                         team_id: u8::from_le(buf[0]),
                     };
-                    thread::spawn(move || while !conn.update() {});
+                    thread::spawn(move || {
+                        loop {
+                            let update_result = conn.update();
+                            match update_result {
+                                Ok(x) => {
+                                    if x {
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("Error occured: {e}");
+                                    break;
+                                }
+                            }
+                        }
+                    });
+                    Ok(())
                 }
                 JOINGAME => {
-                    while stream.read(&mut buf).unwrap() == 0 {}
+                    while stream.read(&mut buf)? == 0 {}
                     let game_id = usize::from_le_bytes(buf);
-                    self.games[game_id].lock().unwrap().write_data(&mut stream);
+                    if game_id >= self.games.len() {
+                        stream.write(&[NO_SUCH_GAME])?;
+                        return Ok(());
+                    }
+                    self.games[game_id]
+                        .lock()
+                        .unwrap()
+                        .write_data(&mut stream)?;
                     let mut conn = Connection {
                         stream,
                         game: self.games[game_id].clone(),
                         team_id: u8::from_le(buf[0]),
                     };
-                    thread::spawn(move || while !conn.update() {});
+                    thread::spawn(move || {
+                        loop {
+                            let update_result = conn.update();
+                            match update_result {
+                                Ok(x) => {
+                                    if x {
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("Error occured: {e}");
+                                    break;
+                                }
+                            }
+                        }
+                    });
+                    Ok(())
                 }
-                _ => {}
+                _ => Ok(()),
             }
+        } else {
+            Ok(())
         }
     }
 }
 
 impl Connection {
-    pub fn read_comm(&mut self) -> Command {
+    pub fn read_comm(&mut self) -> std::io::Result<Option<Command>> {
         let mut buf = [0; 9];
-        while self.stream.read(&mut buf).unwrap() == 0 {}
+        while self.stream.read(&mut buf)? == 0 {}
         let comm = Command::from_byte(
             u8::from_le(buf[0]),
             usize::from_le_bytes(*buf[1..].as_array().unwrap()),
         );
-        comm.unwrap()
+        Ok(comm)
     }
-    pub fn write_check_result(&mut self, check: bool) {
+    pub fn write_check_result(&mut self, check: bool) -> std::io::Result<()> {
         let val = if check { 1_u8.to_le() } else { 0_u8.to_le() };
-        self.stream.write(&[val]).unwrap();
+        self.stream.write(&[val])?;
+        Ok(())
     }
     //return true if the connection is terminated.
-    pub fn update(&mut self) -> bool {
-        let comm = self.read_comm();
+    pub fn update(&mut self) -> std::io::Result<bool> {
+        let comm = self.read_comm()?.ok_or(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid command byte!",
+        ))?;
         match comm {
             Command::Check(ind) => {
                 let check = self.game.lock().unwrap().check(ind);
-                self.write_check_result(check);
+                self.write_check_result(check)?;
             }
             Command::ReadMove(ind) => {
                 let game = self.game.lock().unwrap();
@@ -194,19 +244,21 @@ impl Connection {
                 self.game.lock().unwrap().move_at(ind);
             }
             Command::Terminate(_) => {
-                return true;
+                return Ok(true);
             }
         }
-        false
+        Ok(false)
     }
 }
 
 fn main() {
     let args = env::args().collect::<Vec<String>>();
     let ip = args.get(1).expect("Please pass the IP as an argument");
-    let addr = ip.clone() + ":52525";
+    let addr = ip.clone() + PORT;
     let mut state = State::new();
     loop {
-        state.update(&addr);
+        if let Err(x) = state.update(&addr) {
+            println!("State error occured: {x}")
+        };
     }
 }

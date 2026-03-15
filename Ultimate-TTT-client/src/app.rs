@@ -38,6 +38,8 @@ const MOVE: u8 = 2_u8.to_le();
 const TERMINATE: u8 = 3_u8.to_le();
 const NEWGAME: u8 = 0_u8.to_le();
 const JOINGAME: u8 = 1_u8.to_le();
+const NO_SUCH_GAME: u8 = 0_u8.to_le();
+const GAME_EXISTS: u8 = 1_u8.to_le();
 
 pub struct App {
     pub game: Game,
@@ -180,10 +182,22 @@ impl App {
         v.push(JOINGAME);
         v.extend_from_slice(&game_id.to_le_bytes());
         stream.write(v.as_slice()).unwrap();
-        self.stream = Some(Arc::new(Mutex::new(stream)));
-        self.get_game_data();
-        self.restart_check_thread();
-        println!("Client connected!");
+        let mut exists_buffer = [0; 1];
+        while stream.read(&mut exists_buffer).unwrap() != 0 {}
+        match exists_buffer[0] {
+            GAME_EXISTS => {
+                self.stream = Some(Arc::new(Mutex::new(stream)));
+                self.get_game_data();
+                self.restart_check_thread();
+                self.curr_err_msg = format!("Connected to game #{}", game_id);
+            }
+            NO_SUCH_GAME => {
+                self.curr_err_msg = String::from("No game found with that ID!");
+            }
+            _ => {
+                self.curr_err_msg = String::from("Game sent invalid signal!");
+            }
+        }
     }
     pub fn send_make_new_game(&mut self, layers: u8, rank: u8, num_teams: u8, in_a_row: u8) {
         self.terminate();
@@ -210,6 +224,7 @@ impl App {
         self.game = Game::new(board, default_teams(u8::from_le(num_teams)), 0, vec![], 0);
         self.stream = Some(Arc::new(Mutex::new(stream)));
         self.restart_check_thread();
+        self.curr_err_msg = format!("Game with ID {gid} created and joined!");
     }
     pub fn restart_check_thread(&mut self) {
         self.check_thread_kill.swap(true, ORDER);
