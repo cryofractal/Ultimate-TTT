@@ -320,7 +320,11 @@ pub fn check(stream: &mut TcpStream, len: usize) -> bool {
     v.push(CHECK);
     v.extend_from_slice(&len.to_le_bytes());
     stream.write(v.as_slice()).unwrap();
-    while stream.read(&mut buf).unwrap() == 0 {}
+    while if let Ok(x) = stream.read(&mut buf) {
+        x == 0
+    } else {
+        return true;
+    } {}
     let val = u8::from_le(buf[0]);
     if val == 0 { false } else { true }
 }
