@@ -1,7 +1,10 @@
 use std::{
     io::{Read, Write},
     net::TcpStream,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
     thread::{self, sleep},
     time::Duration,
 };
@@ -9,6 +12,7 @@ use std::{
 use egui::*;
 
 use crate::{PASSWORD, board::Board, game::Game, team::default_teams};
+const ORDER: Ordering = Ordering::Relaxed;
 
 const KEYBINDS_3: [(Key, usize); 9] = [
     (Key::R, 0),
@@ -37,7 +41,7 @@ const JOINGAME: u8 = 1_u8.to_le();
 
 pub struct App {
     pub game: Game,
-    pub num_moves: Arc<Mutex<usize>>,
+    pub num_moves: Arc<AtomicUsize>,
     pub curr_ind: usize,
     pub depth: u8,
     pub newboard_rank: u8,
@@ -47,11 +51,10 @@ pub struct App {
     pub curr_logfile_path: String,
     pub stream: Option<Arc<Mutex<TcpStream>>>,
     pub my_team_id: u8,
-    pub check_thread_kill: Arc<Mutex<bool>>,
-    pub check_thread_check: Arc<Mutex<bool>>,
+    pub check_thread_kill: Arc<AtomicBool>,
+    pub check_thread_check: Arc<AtomicBool>,
     conn_game_id: usize,
     curr_ip: String,
-    val: usize,
     curr_err_msg: String,
 }
 
@@ -59,7 +62,7 @@ impl App {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         App {
             game: Game::default_game(),
-            num_moves: Arc::new(Mutex::new(0)),
+            num_moves: Arc::new(AtomicUsize::new(0)),
             curr_ind: 0,
             depth: 3,
             newboard_in_a_row: 3,
@@ -69,9 +72,8 @@ impl App {
             curr_logfile_path: String::new(),
             stream: None,
             my_team_id: 0,
-            val: 0,
-            check_thread_kill: Arc::new(Mutex::new(false)),
-            check_thread_check: Arc::new(Mutex::new(true)),
+            check_thread_kill: Arc::new(AtomicBool::new(false)),
+            check_thread_check: Arc::new(AtomicBool::new(true)),
             curr_ip: String::from(ADDR),
             conn_game_id: 0,
             curr_err_msg: String::new(),
@@ -141,7 +143,7 @@ impl App {
         {
             self.do_move(ind);
             self.game.move_at(ind);
-            *self.num_moves.lock().unwrap() += 1;
+            self.num_moves.fetch_add(1, ORDER);
             self.curr_ind = 0;
         }
     }
@@ -167,6 +169,7 @@ impl App {
     pub fn send_join_game(&mut self, game_id: usize) {
         self.terminate();
         let mut stream = if let Ok(x) = TcpStream::connect(&self.curr_ip) {
+            self.curr_err_msg = String::from("Connected!");
             x
         } else {
             self.curr_err_msg = String::from("Connection failed!");
@@ -182,19 +185,14 @@ impl App {
         self.restart_check_thread();
         println!("Client connected!");
     }
-    pub fn send_make_new_game(
-        &mut self,
-        layers: u8,
-        rank: u8,
-        num_teams: u8,
-        in_a_row: u8,
-    ) -> Option<usize> {
+    pub fn send_make_new_game(&mut self, layers: u8, rank: u8, num_teams: u8, in_a_row: u8) {
         self.terminate();
         let mut stream = if let Ok(x) = TcpStream::connect(&self.curr_ip) {
+            self.curr_err_msg = String::from("Connected!");
             x
         } else {
             self.curr_err_msg = String::from("Connection failed!");
-            return None;
+            return;
         };
         let mut v = Vec::new();
         v.extend_from_slice(&PASSWORD.to_le_bytes());
@@ -206,25 +204,28 @@ impl App {
         stream.write(v.as_slice()).unwrap();
         let mut id_buf = [0; 8];
         while stream.read(&mut id_buf).unwrap() == 0 {}
-        Some(usize::from_le_bytes(id_buf))
+        let gid = usize::from_le_bytes(id_buf);
+        self.conn_game_id = gid;
+        self.stream = Some(Arc::new(Mutex::new(stream)));
+        self.restart_check_thread();
     }
     pub fn restart_check_thread(&mut self) {
-        *self.check_thread_kill.lock().unwrap() = true;
-        self.check_thread_kill = Arc::new(Mutex::new(false));
+        self.check_thread_kill.swap(true, ORDER);
+        self.check_thread_kill = Arc::new(AtomicBool::new(false));
         let check_check = self.check_thread_check.clone();
         let second_stream = self.stream.as_ref().unwrap().clone();
         let check_kill = self.check_thread_kill.clone();
         let num_moves2 = self.num_moves.clone();
         thread::spawn(move || {
             loop {
-                if *check_kill.lock().unwrap() == true {
+                if check_kill.fetch_and(true, ORDER) == true {
                     break;
                 } else {
                     let val = check(
                         &mut second_stream.lock().unwrap(),
-                        *num_moves2.lock().unwrap(),
+                        num_moves2.fetch_add(0, ORDER),
                     );
-                    *check_check.lock().unwrap() = val;
+                    check_check.swap(val, ORDER);
                 }
                 sleep(Duration::from_millis(100));
             }
@@ -245,7 +246,7 @@ impl App {
             let mut move_buffer = [0; 8];
             while stream.read(&mut length_buffer).unwrap() == 0 {}
             let len = usize::from_le_bytes(length_buffer);
-            *self.num_moves.lock().unwrap() = len;
+            self.num_moves.swap(len, ORDER);
             for _ in 0..len {
                 while stream.read(&mut move_buffer).unwrap() == 0 {}
                 let mov = usize::from_le_bytes(move_buffer.clone());
@@ -256,7 +257,7 @@ impl App {
     }
     pub fn check(&mut self) -> bool {
         if let Some(ref str) = self.stream {
-            check(&mut str.lock().unwrap(), *self.num_moves.lock().unwrap())
+            check(&mut str.lock().unwrap(), self.num_moves.fetch_add(0, ORDER))
         } else {
             todo!()
         }
@@ -273,7 +274,7 @@ impl App {
             while stream.read(&mut team_id_buf).unwrap() == 0 {}
             while stream.read(&mut buf).unwrap() == 0 {}
             let len = usize::from_le_bytes(buf.clone());
-            *self.num_moves.lock().unwrap() += len;
+            self.num_moves.fetch_add(len, ORDER);
             for _ in 0..len {
                 while stream.read(&mut buf).unwrap() == 0 {}
                 let mov = usize::from_le_bytes(buf.clone());
@@ -304,12 +305,10 @@ impl App {
         self.stream = None;
     }
     pub fn catch_up(&mut self) {
-        let check_mutex = self.check_thread_check.lock().unwrap();
-        let check = *check_mutex;
-        drop(check_mutex);
+        let check = self.check_thread_check.fetch_and(true, ORDER);
         if !check {
             self.read_moves();
-            *self.check_thread_check.lock().unwrap() = true;
+            self.check_thread_check.swap(true, ORDER);
         }
     }
 }
@@ -355,15 +354,12 @@ impl eframe::App for App {
             //     self.depth = self.newboard_rank.min(5);
             // }
             if ui.button("Make New Game").clicked() {
-                if let Some(id) = self.send_make_new_game(
+                self.send_make_new_game(
                     self.newboard_layer,
                     self.newboard_rank,
                     self.newboard_numteams,
                     self.newboard_in_a_row,
-                ) {
-                    self.send_join_game(id);
-                    self.conn_game_id = id;
-                };
+                );
             }
             self.catch_up();
             ui.label("Rendering Depth");
@@ -387,6 +383,9 @@ impl eframe::App for App {
             ui.add(Slider::new(&mut self.conn_game_id, 0..=15));
             if ui.button("Join Game").clicked() {
                 self.send_join_game(self.conn_game_id);
+            }
+            if ui.button("Disconnect").clicked() {
+                self.terminate();
             }
             let rect_size = Vec2::splat(screen_size.size().y.min(screen_size.size().x));
             let display_rect = Rect::from_center_size(screen_size.center(), rect_size);

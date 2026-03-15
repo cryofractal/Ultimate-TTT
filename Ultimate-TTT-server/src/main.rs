@@ -3,7 +3,8 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
-    thread,
+    thread::{self, sleep},
+    time::Duration,
 };
 //pub const ADDR: &str = "68.183.121.208:52525";
 pub const PASSWORD: usize = 182309128390812;
@@ -140,6 +141,12 @@ impl State {
                     ))));
                     let id = self.games.len() - 1;
                     while stream.write(&id.to_le_bytes()).unwrap() == 0 {}
+                    let mut conn = Connection {
+                        stream,
+                        game: self.games[id].clone(),
+                        team_id: u8::from_le(buf[0]),
+                    };
+                    thread::spawn(move || while !conn.update() {});
                 }
                 JOINGAME => {
                     while stream.read(&mut buf).unwrap() == 0 {}
