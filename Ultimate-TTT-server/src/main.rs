@@ -1,10 +1,11 @@
 use std::{
+    env,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
     thread,
 };
-pub const ADDR: &str = "68.183.121.208:52525";
+//pub const ADDR: &str = "68.183.121.208:52525";
 pub const PASSWORD: usize = 182309128390812;
 pub const NEWGAME: u8 = 0_u8.to_le();
 pub const JOINGAME: u8 = 1_u8.to_le();
@@ -114,8 +115,8 @@ impl State {
     pub fn new() -> Self {
         Self { games: vec![] }
     }
-    pub fn update(&mut self) {
-        let listener = TcpListener::bind(ADDR).unwrap();
+    pub fn update(&mut self, ip: &str) {
+        let listener = TcpListener::bind(ip).unwrap();
         let (mut stream, _addr) = listener.accept().unwrap();
         let mut buf = [0; 8];
         while stream.read(&mut buf).unwrap() == 0 {}
@@ -195,8 +196,11 @@ impl Connection {
 }
 
 fn main() {
+    let args = env::args().collect::<Vec<String>>();
+    let ip = args.get(1).expect("Please pass the IP as an argument");
+    let addr = ip.clone() + ":52525";
     let mut state = State::new();
     loop {
-        state.update();
+        state.update(&addr);
     }
 }
