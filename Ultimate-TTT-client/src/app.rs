@@ -376,11 +376,14 @@ impl eframe::App for App {
             //     self.write_to_file(&PathBuf::from(&(self.curr_logfile_path.clone() + ".txt")));
             // }
             ui.label("Team Number");
-            ui.add(Slider::new(&mut self.my_team_id, 0..=1));
+            ui.add(Slider::new(
+                &mut self.my_team_id,
+                0..=(self.game.teams.len() - 1) as u8,
+            ));
             ui.label("Server Address");
             ui.add(TextEdit::singleline(&mut self.curr_ip));
             ui.label("Game ID");
-            ui.add(Slider::new(&mut self.conn_game_id, 0..=15));
+            ui.add(DragValue::new(&mut self.conn_game_id));
             if ui.button("Join Game").clicked() {
                 self.send_join_game(self.conn_game_id);
             }
