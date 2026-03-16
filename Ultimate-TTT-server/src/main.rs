@@ -3,7 +3,10 @@ use std::{
     fs::{self, OpenOptions},
     io::{Error, Read, Write},
     net::{TcpListener, TcpStream},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     thread::{self, sleep},
     time::Duration,
 };
@@ -14,7 +17,9 @@ pub const NEWGAME: u8 = 0_u8.to_le();
 pub const JOINGAME: u8 = 1_u8.to_le();
 pub const NO_SUCH_GAME: u8 = 0_u8.to_le();
 pub const GAME_EXISTS: u8 = 1_u8.to_le();
-pub const SAVE_DELAY: u64 = 10;
+pub const SAVE_DELAY: u64 = 30;
+
+pub const ORDER: Ordering = Ordering::Relaxed;
 
 pub struct Game {
     id: usize,
@@ -73,6 +78,7 @@ impl Game {
         let mut f = fs::OpenOptions::new()
             .create(true)
             .truncate(true)
+            .write(true)
             .open(filename)?;
         f.write_all(buf.as_slice())?;
         Ok(())
@@ -166,6 +172,7 @@ pub struct Connection {
     pub stream: TcpStream,
     pub game: Arc<Mutex<Game>>,
     pub team_id: u8,
+    pub update_check: Arc<AtomicBool>,
 }
 pub struct State {
     games: Vec<Arc<Mutex<Game>>>,
@@ -179,6 +186,7 @@ impl State {
         OpenOptions::new()
             .truncate(true)
             .create(true)
+            .write(true)
             .open(NUM_GAMES_FILENAME)?
             .write(&self.games.len().to_le_bytes())?;
         for game in &self.games {
@@ -196,7 +204,11 @@ impl State {
         }
         Ok(new_state)
     }
-    pub fn update(&mut self, mut stream: TcpStream) -> std::io::Result<()> {
+    pub fn update(
+        &mut self,
+        mut stream: TcpStream,
+        update_check: Arc<AtomicBool>,
+    ) -> std::io::Result<()> {
         let mut buf = [0; 8];
         while stream.read(&mut buf)? == 0 {}
         let pass = usize::from_le_bytes(*buf[0..8].as_array().unwrap());
@@ -220,10 +232,12 @@ impl State {
                         layer, rank, in_a_row, num_teams, id,
                     ))));
                     while stream.write(&id.to_le_bytes())? == 0 {}
+                    update_check.swap(true, ORDER);
                     let mut conn = Connection {
                         stream,
                         game: self.games[id].clone(),
                         team_id: u8::from_le(buf[0]),
+                        update_check,
                     };
                     thread::spawn(move || {
                         loop {
@@ -258,6 +272,7 @@ impl State {
                         stream,
                         game: self.games[game_id].clone(),
                         team_id: u8::from_le(buf[0]),
+                        update_check,
                     };
                     thread::spawn(move || {
                         loop {
@@ -317,6 +332,7 @@ impl Connection {
             }
             Command::DoMove(ind) => {
                 self.game.lock().unwrap().move_at(ind);
+                self.update_check.swap(true, ORDER);
             }
             Command::Terminate(_) => {
                 return Ok(true);
@@ -335,15 +351,22 @@ fn main() {
     } else {
         State::new()
     }));
+    let update_check = Arc::new(AtomicBool::new(true));
     let state2 = state.clone();
+    let update_check2 = update_check.clone();
     thread::spawn(move || {
-        sleep(Duration::from_secs(1800));
-        state2.lock().unwrap().save().unwrap();
+        loop {
+            sleep(Duration::from_secs(SAVE_DELAY));
+            if update_check2.swap(false, ORDER) {
+                state2.lock().unwrap().save().unwrap();
+                println!("Saved the games!");
+            }
+        }
     });
     loop {
         let listener = TcpListener::bind(&addr).unwrap();
         let (stream, _addr) = listener.accept().unwrap();
-        if let Err(x) = state.lock().unwrap().update(stream) {
+        if let Err(x) = state.lock().unwrap().update(stream, update_check.clone()) {
             println!("State error occured: {x}")
         };
     }
