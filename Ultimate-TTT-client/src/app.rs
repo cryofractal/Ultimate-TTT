@@ -351,7 +351,7 @@ impl eframe::App for App {
         CentralPanel::default().show(ctx, |ui| {
             let screen_size = ui.available_rect_before_wrap();
             ui.label("In a Row");
-            ui.add(Slider::new(&mut self.newboard_in_a_row, 1..=8));
+            ui.add(Slider::new(&mut self.newboard_in_a_row, 2..=8));
             ui.label("Layer");
             ui.add(Slider::new(&mut self.newboard_layer, 2..=8));
             ui.label("Rank");
