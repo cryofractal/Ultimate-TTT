@@ -183,7 +183,7 @@ impl App {
         v.extend_from_slice(&game_id.to_le_bytes());
         stream.write(v.as_slice()).unwrap();
         let mut exists_buffer = [0; 1];
-        while stream.read(&mut exists_buffer).unwrap() != 0 {}
+        while stream.read(&mut exists_buffer).unwrap() == 0 {}
         match exists_buffer[0] {
             GAME_EXISTS => {
                 self.stream = Some(Arc::new(Mutex::new(stream)));

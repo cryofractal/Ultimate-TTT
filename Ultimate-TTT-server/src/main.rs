@@ -1,9 +1,11 @@
 use std::{
     env,
-    io::{Read, Write},
+    fs::{self, OpenOptions},
+    io::{Error, Read, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
-    thread::{self},
+    thread::{self, sleep},
+    time::Duration,
 };
 pub const PORT: &str = ":52525";
 //pub const ADDR: &str = "68.183.121.208:52525";
@@ -12,8 +14,10 @@ pub const NEWGAME: u8 = 0_u8.to_le();
 pub const JOINGAME: u8 = 1_u8.to_le();
 pub const NO_SUCH_GAME: u8 = 0_u8.to_le();
 pub const GAME_EXISTS: u8 = 1_u8.to_le();
+pub const SAVE_DELAY: u64 = 10;
 
 pub struct Game {
+    id: usize,
     moves: Vec<usize>,
     layers: u8,
     rank: u8,
@@ -22,8 +26,58 @@ pub struct Game {
     num_teams: u8,
 }
 
+const EXTENSION: &str = "game";
+const PREFIX: &str = "TTTGAME";
+const NUM_GAMES_FILENAME: &str = "./Games/NUMGAMES.txt";
 impl Game {
-    pub fn new(layer: u8, rank: u8, in_a_row: u8, num_teams: u8) -> Self {
+    pub fn load(id: usize) -> std::io::Result<Self> {
+        let filename = format!("./Games/{}-{}.{}", PREFIX, id, EXTENSION);
+        let data = fs::read(filename)?;
+        let e = Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Error loading from file: File too short or data is improper!",
+        );
+        if data.len() < 5 || data.len() % 8 != 5 {
+            return Err(e);
+        }
+        let mut g = Self {
+            id,
+            moves: vec![],
+            layers: u8::from_le(data[0]),
+            rank: u8::from_le(data[1]),
+            in_a_row: u8::from_le(data[2]),
+            curr_team: u8::from_le(data[3]),
+            num_teams: u8::from_le(data[4]),
+        };
+        let mut ind = 5;
+        while ind + 8 <= data.len() {
+            let nextmove = usize::from_le_bytes(*data[ind..(ind + 8)].as_array().unwrap());
+            g.moves.push(nextmove);
+            ind += 8;
+        }
+        Ok(g)
+    }
+    pub fn save(&self) -> std::io::Result<()> {
+        let filename = format!("./Games/{}-{}.{}", PREFIX, self.id, EXTENSION);
+        let mut buf = Vec::new();
+        buf.extend([
+            self.layers.to_le(),
+            self.rank.to_le(),
+            self.in_a_row.to_le(),
+            self.curr_team.to_le(),
+            self.num_teams.to_le(),
+        ]);
+        for mov in &self.moves {
+            buf.extend(mov.to_le_bytes());
+        }
+        let mut f = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .open(filename)?;
+        f.write_all(buf.as_slice())?;
+        Ok(())
+    }
+    pub fn new(layer: u8, rank: u8, in_a_row: u8, num_teams: u8, id: usize) -> Self {
         Self {
             moves: vec![],
             layers: layer,
@@ -31,6 +85,7 @@ impl Game {
             in_a_row,
             curr_team: 0,
             num_teams,
+            id,
         }
     }
     pub fn move_at(&mut self, ind: usize) {
@@ -71,16 +126,16 @@ impl Game {
         }
         stream.write(v.as_slice()).unwrap();
     }
-    pub fn new_test() -> Self {
-        Self {
-            moves: vec![],
-            layers: 3,
-            rank: 2,
-            in_a_row: 3,
-            curr_team: 0,
-            num_teams: 2,
-        }
-    }
+    // pub fn new_test() -> Self {
+    //     Self {
+    //         moves: vec![],
+    //         layers: 3,
+    //         rank: 2,
+    //         in_a_row: 3,
+    //         curr_team: 0,
+    //         num_teams: 2,
+    //     }
+    // }
     pub fn check(&self, ind: usize) -> bool {
         ind == self.moves.len()
     }
@@ -120,9 +175,28 @@ impl State {
     pub fn new() -> Self {
         Self { games: vec![] }
     }
-    pub fn update(&mut self, ip: &str) -> std::io::Result<()> {
-        let listener = TcpListener::bind(ip).unwrap();
-        let (mut stream, _addr) = listener.accept().unwrap();
+    pub fn save(&self) -> std::io::Result<()> {
+        OpenOptions::new()
+            .truncate(true)
+            .create(true)
+            .open(NUM_GAMES_FILENAME)?
+            .write(&self.games.len().to_le_bytes())?;
+        for game in &self.games {
+            game.lock().unwrap().save()?;
+        }
+        Ok(())
+    }
+    pub fn load() -> std::io::Result<Self> {
+        let len = usize::from_le_bytes(*fs::read(NUM_GAMES_FILENAME)?[0..8].as_array().unwrap());
+        let mut new_state = Self {
+            games: Vec::with_capacity(len),
+        };
+        for i in 0..len {
+            new_state.games.push(Arc::new(Mutex::new(Game::load(i)?)));
+        }
+        Ok(new_state)
+    }
+    pub fn update(&mut self, mut stream: TcpStream) -> std::io::Result<()> {
         let mut buf = [0; 8];
         while stream.read(&mut buf)? == 0 {}
         let pass = usize::from_le_bytes(*buf[0..8].as_array().unwrap());
@@ -140,10 +214,11 @@ impl State {
                         u8::from_le(header_buff[2]),
                         u8::from_le(header_buff[3]),
                     );
+
+                    let id = self.games.len();
                     self.games.push(Arc::new(Mutex::new(Game::new(
-                        layer, rank, in_a_row, num_teams,
+                        layer, rank, in_a_row, num_teams, id,
                     ))));
-                    let id = self.games.len() - 1;
                     while stream.write(&id.to_le_bytes())? == 0 {}
                     let mut conn = Connection {
                         stream,
@@ -255,9 +330,20 @@ fn main() {
     let args = env::args().collect::<Vec<String>>();
     let ip = args.get(1).expect("Please pass the IP as an argument");
     let addr = ip.clone() + PORT;
-    let mut state = State::new();
+    let state = Arc::new(Mutex::new(if let Ok(s) = State::load() {
+        s
+    } else {
+        State::new()
+    }));
+    let state2 = state.clone();
+    thread::spawn(move || {
+        sleep(Duration::from_secs(1800));
+        state2.lock().unwrap().save().unwrap();
+    });
     loop {
-        if let Err(x) = state.update(&addr) {
+        let listener = TcpListener::bind(&addr).unwrap();
+        let (stream, _addr) = listener.accept().unwrap();
+        if let Err(x) = state.lock().unwrap().update(stream) {
             println!("State error occured: {x}")
         };
     }
