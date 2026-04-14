@@ -1,2 +1,2 @@
 # Ultimate-TTT
-Nested layered n-dimensional Tic Tac Toe program
+A generalized m,n,k game simulator on a n-dimensional nested square grid
